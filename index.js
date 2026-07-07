@@ -1,5 +1,8 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const chalk = require('chalk');
+const figlet = require('figlet');
+const gradient = require('gradient-string');
+const qrcode = require('qrcode-terminal');
 const { Boom } = require('@hapi/boom');
 const readline = require('readline');
 const pino = require('pino');
@@ -16,7 +19,6 @@ function cargarComandos() {
 
   for (const categoria of categorias) {
     const catPath = path.join(basePath, categoria);
-
     const archivos = fs.readdirSync(catPath).filter(f => f.endsWith('.js'));
     for (const archivo of archivos) {
       const exportado = require(path.join(catPath, archivo));
@@ -34,8 +36,29 @@ const comandos = cargarComandos();
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const pregunta = (texto) => new Promise((resolve) => rl.question(texto, resolve));
 
+function mostrarBanner() {
+  console.clear();
+  const texto = figlet.textSync('ALEPANDA', { font: 'Standard' });
+  console.log(gradient.pastel.multiline(texto));
+  console.log(gradient.cristal('made with love by ALEPANDITA'));
+  console.log('');
+}
+
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+
+  mostrarBanner();
+
+  let metodo = null;
+  const yaRegistrado = fs.existsSync(path.join(__dirname, 'auth_info', 'creds.json'));
+
+  if (!yaRegistrado) {
+    console.log('Seleccione una opcion:');
+    console.log('1. Con codigo QR');
+    console.log('2. Con codigo de texto de 8 digitos');
+    metodo = await pregunta('> ');
+  }
+
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
@@ -43,9 +66,21 @@ async function startBot() {
   });
 
   if (!sock.authState.creds.registered) {
-    const numero = await pregunta('Escribe tu numero con codigo de pais (ej: 5491122334455): ');
-    const codigo = await sock.requestPairingCode(numero.trim());
-    console.log(`Tu codigo de vinculacion es: ${codigo}`);
+    if (metodo?.trim() === '1') {
+      sock.ev.on('connection.update', (update) => {
+        if (update.qr) {
+          console.clear();
+          mostrarBanner();
+          qrcode.generate(update.qr, { small: true });
+          console.log('Escanea este codigo QR desde WhatsApp > Dispositivos vinculados');
+        }
+      });
+    } else {
+      const numero = await pregunta('Escribe tu numero con codigo de pais (ej: 5491122334455): ');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const codigo = await sock.requestPairingCode(numero.trim());
+      console.log(`Tu codigo de vinculacion es: ${codigo}`);
+    }
   }
 
   sock.ev.on('connection.update', (update) => {
@@ -60,6 +95,56 @@ async function startBot() {
   });
 
   sock.ev.on('creds.update', saveCreds);
+sock.ev.on('group-participants.update', async (update) => {
+    const { id: jid, participants, action } = update;
+    const { leerDB, getGrupo } = require('./lib/db');
+    const fs = require('fs');
+    const path = require('path');
+
+    const db = leerDB();
+    const grupo = getGrupo(db, jid);
+
+    let metadata;
+    try {
+      metadata = await sock.groupMetadata(jid);
+    } catch (err) {
+      return;
+    }
+
+    for (const participante of participants) {
+      const numero = participante.split('@')[0];
+
+      if (action === 'add' && grupo.bienvenida) {
+        let texto = grupo.textoBienvenida || 'Bienvenido/a {user} al grupo {group}!';
+        texto = texto.replace('{user}', `@${numero}`).replace('{group}', metadata.subject);
+
+        if (grupo.usarDescripcion && metadata.desc) {
+          texto += `\n\n📋 *Descripcion del grupo:*\n${metadata.desc}`;
+        }
+
+        const imgPath = path.join(__dirname, 'assets', 'bienvenida', `${jid.replace('@g.us', '')}.jpg`);
+        if (fs.existsSync(imgPath)) {
+          const buffer = fs.readFileSync(imgPath);
+          await sock.sendMessage(jid, { image: buffer, caption: texto, mentions: [participante] });
+        } else {
+          await sock.sendMessage(jid, { text: texto, mentions: [participante] });
+        }
+      }
+
+      if (action === 'remove' && grupo.despedida) {
+        let texto = grupo.textoDespedida || '{user} salio del grupo.';
+        texto = texto.replace('{user}', `@${numero}`).replace('{group}', metadata.subject);
+
+        const imgPath = path.join(__dirname, 'assets', 'despedida', `${jid.replace('@g.us', '')}.jpg`);
+        if (fs.existsSync(imgPath)) {
+          const buffer = fs.readFileSync(imgPath);
+          await sock.sendMessage(jid, { image: buffer, caption: texto, mentions: [participante] });
+        } else {
+          await sock.sendMessage(jid, { text: texto, mentions: [participante] });
+        }
+      }
+    }
+  });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
@@ -72,7 +157,6 @@ async function startBot() {
     const texto = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
     const esGrupo = jid.endsWith('@g.us');
 
-    // Revisar mute, antilink y registrar actividad antes de procesar comandos
     if (esGrupo) {
       const { leerDB, guardarDB, getUsuario, getGrupo } = require('./lib/db');
       const db = leerDB();

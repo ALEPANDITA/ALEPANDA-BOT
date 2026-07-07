@@ -18,14 +18,14 @@ function obtenerInfo(url) {
 }
 
 module.exports = {
-  name: 'ig',
+  name: 'facebook',
   category: 'download',
-  description: 'Descarga un video o foto de Instagram (ej: .ig <link>)',
+  description: 'Descarga un video de Facebook (ej: .facebook <link>)',
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const url = texto.slice((prefix + 'ig ').length).trim();
+    const url = texto.slice((prefix + 'facebook ').length).trim();
 
     if (!url) {
-      return sock.sendMessage(jid, { text: `Uso: ${prefix}ig <link>` });
+      return sock.sendMessage(jid, { text: `Uso: ${prefix}facebook <link>` });
     }
 
     let info;
@@ -33,13 +33,14 @@ module.exports = {
       info = await obtenerInfo(url);
     } catch (err) {
       console.error(err);
-      return sock.sendMessage(jid, { text: 'No se pudo obtener informacion de ese contenido.' });
+      return sock.sendMessage(jid, { text: 'No se pudo obtener informacion de ese video.' });
     }
 
-    const caption = `📸 *${info.title || 'Contenido de Instagram'}*\n\n` +
+    const caption = `📘 *${info.title || 'Video de Facebook'}*\n\n` +
       `👤 Autor: ${info.uploader || 'Desconocido'}\n` +
-      `❤️ Likes: ${(info.like_count || 0).toLocaleString()}\n\n` +
-      `Descargando...`;
+      `⏱️ Duracion: ${info.duration ? Math.floor(info.duration / 60) + ':' + String(Math.floor(info.duration % 60)).padStart(2, '0') : 'Desconocida'}\n` +
+      `👁️ Vistas: ${(info.view_count || 0).toLocaleString()}\n\n` +
+      `Descargando video...`;
 
     if (info.thumbnail) {
       await sock.sendMessage(jid, { image: { url: info.thumbnail }, caption });
@@ -47,13 +48,13 @@ module.exports = {
       await sock.sendMessage(jid, { text: caption });
     }
 
-    const outputPath = path.join(os.tmpdir(), `ig_${Date.now()}.mp4`);
+    const outputPath = path.join(os.tmpdir(), `fb_${Date.now()}.mp4`);
     const comando = `yt-dlp -f "best[ext=mp4]" -o "${outputPath}" "${url}"`;
 
     exec(comando, async (error) => {
       if (error) {
         console.error(error);
-        return sock.sendMessage(jid, { text: 'No se pudo descargar ese contenido de Instagram.' });
+        return sock.sendMessage(jid, { text: 'No se pudo descargar ese video de Facebook.' });
       }
 
       try {
@@ -62,7 +63,7 @@ module.exports = {
         fs.unlinkSync(outputPath);
       } catch (err) {
         console.error(err);
-        await sock.sendMessage(jid, { text: 'No se pudo enviar el contenido descargado.' });
+        await sock.sendMessage(jid, { text: 'No se pudo enviar el video descargado.' });
       }
     });
   }
