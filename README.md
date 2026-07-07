@@ -18,5 +18,3 @@ pip install yt-dlp --break-system-packages
 git clone https://github.com/TU_USUARIO/alepanda-bot.git
 cd alepanda-bot
 npm install
-
-cd ALEPANDA-BOT
