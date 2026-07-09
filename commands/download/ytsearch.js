@@ -25,32 +25,35 @@ module.exports = {
 
       const top5 = videos.slice(0, 5);
 
-      const albumMsg = await sock.sendMessage(jid, {
-        album: { expectedImageCount: top5.length }
+      const cards = top5.map((v, i) => ({
+        image: { url: v.thumbnail },
+        title: `${i + 1}. ${v.title}`,
+        body: `Canal: ${v.author.name}\nDuracion: ${v.timestamp} | Vistas: ${formatearVistas(v.views)}`,
+        footer: 'ALEPANDA BOT',
+        buttons: [
+          {
+            name: 'quick_reply',
+            buttonParamsJson: JSON.stringify({
+              display_text: '🎵 Descargar MP3',
+              id: `ytmp3|${v.url}`
+            })
+          },
+          {
+            name: 'quick_reply',
+            buttonParamsJson: JSON.stringify({
+              display_text: '🎬 Descargar MP4',
+              id: `ytmp4|${v.url}`
+            })
+          }
+        ]
+      }));
+
+      await sock.sendMessage(jid, {
+        text: `🌸 Resultados para: *${query}*`,
+        title: 'ALEPANDA BOT',
+        footer: 'Desliza para ver mas resultados',
+        cards
       });
-
-      for (let i = 0; i < top5.length; i++) {
-        const v = top5[i];
-
-        const caption =
-          `🌸 *ALEPANDA BOT* 🌸\n\n` +
-          `Busqueda: ${query}\n` +
-          `➤ N°: ${i + 1}\n` +
-          `➤ Titulo: ${v.title}\n` +
-          `➤ Canal: ${v.author.name}\n` +
-          `➤ Duracion: ${v.timestamp}\n` +
-          `➤ Vistas: ${formatearVistas(v.views)}\n` +
-          `➤ Publicado: ${v.ago || 'Desconocido'}\n` +
-          `➤ URL: ${v.url}\n\n` +
-          `🎵 MP3: ${prefix}ytmp3 ${v.url}\n` +
-          `🎬 MP4: ${prefix}ytmp4 ${v.url}`;
-
-        await sock.sendMessage(jid, {
-          image: { url: v.thumbnail },
-          caption,
-          albumParentKey: albumMsg.key
-        });
-      }
     } catch (err) {
       console.error(err);
       await sock.sendMessage(jid, { text: 'Ocurrio un error al buscar.' });

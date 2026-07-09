@@ -25,7 +25,7 @@ function formatearDuracion(segundos) {
 
 module.exports = {
   name: 'play',
-  category: 'general',
+  category: 'download',
   description: 'Busca y descarga un audio de YouTube',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const query = texto.slice((prefix + 'play ').length).trim();

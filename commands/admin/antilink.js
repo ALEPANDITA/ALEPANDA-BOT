@@ -1,4 +1,5 @@
 const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 module.exports = {
   name: 'antilink',
@@ -6,11 +7,10 @@ module.exports = {
   description: 'Activar/desactivar antilink',
   groupOnly: true,
   execute: async (sock, jid, msg) => {
-    const metadata = await sock.groupMetadata(jid);
     const remitente = msg.key.participant || msg.key.remoteJid;
-    const participante = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente);
+    const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
 
-    if (!participante?.admin) {
+    if (!esAdmin) {
       return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
     }
 

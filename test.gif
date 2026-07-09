@@ -1,0 +1,7 @@
+{
+  "link": "https://cdn.purrbot.site/sfw/kiss/gif/kiss_074.gif",
+  "error": false,
+  "response-code": 200,
+  "time": 0,
+  "deprecation-warning": "This endpoint was deprecated. Please forward future requests towards https://api.purrbot.site/v2/img/sfw/kiss/gif"
+}

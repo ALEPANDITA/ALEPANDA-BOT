@@ -1,5 +1,6 @@
 const { leerConfig } = require('../../lib/config');
 const { setApiKey } = require('../../lib/apikeys');
+const { resolverLid, mismoUsuario } = require('../../lib/permisos');
 
 module.exports = {
   name: 'setapikey',
@@ -8,8 +9,12 @@ module.exports = {
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const config = leerConfig();
     const remitente = msg.key.participant || msg.key.remoteJid;
+    const remitenteResuelto = await resolverLid(sock, remitente);
 
-    if (!config.owners || !config.owners.includes(remitente)) {
+    console.log('DEBUG remitente:', remitente, '| resuelto:', remitenteResuelto, '| owners:', JSON.stringify(config.owners));
+    const esOwner = config.owners && config.owners.some(o => mismoUsuario(o, remitente) || mismoUsuario(o, remitenteResuelto));
+
+    if (!esOwner) {
       return sock.sendMessage(jid, { text: 'Solo un owner del bot puede usar este comando.' });
     }
 

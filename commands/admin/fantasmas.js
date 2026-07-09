@@ -2,13 +2,13 @@ const { leerDB, getGrupo } = require('../../lib/db');
 
 module.exports = {
   name: 'fantasmas',
-  category: 'general',
+  category: 'admin',
   description: 'Muestra usuarios inactivos del grupo (ej: .fantasmas 7)',
   groupOnly: true,
   execute: async (sock, jid, msg, { texto }) => {
     const metadata = await sock.groupMetadata(jid);
     const remitente = msg.key.participant || msg.key.remoteJid;
-    const quienEscribe = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente);
+    const quienEscribe = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente);
 
     if (!quienEscribe?.admin) {
       return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
@@ -28,7 +28,7 @@ module.exports = {
     const fantasmas = [];
 
     for (const p of metadata.participants) {
-      if (p.id === botId || p.phoneNumber === botId) continue;
+      if (p.jid === botId || p.id === botId || p.lid === botId) continue;
 
       const ultimaActividad = actividad[p.id];
       const inactivo = !ultimaActividad || (ahora - ultimaActividad) > limiteMs;

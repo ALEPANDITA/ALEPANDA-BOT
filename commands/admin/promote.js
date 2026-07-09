@@ -1,12 +1,11 @@
-async function cambiarAdmin(sock, jid, msg, accion) {
-  const metadata = await sock.groupMetadata(jid);
-  const participante = metadata.participants.find(p => p.id === msg.key.participant);
-  const botId = sock.user.id.replace(/:\d+/, '');
-  const esAdminBot = metadata.participants.find(
-    p => p.phoneNumber === botId || p.id === botId
-  )?.admin;
+const { esAdminDelGrupo, esAdminDelBot } = require('../../lib/permisos');
 
-  if (!participante?.admin) {
+async function cambiarAdmin(sock, jid, msg, accion) {
+  const remitente = msg.key.participant || msg.key.remoteJid;
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
+  const esAdminBot = await esAdminDelBot(sock, jid);
+
+  if (!esAdmin) {
     return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
   }
   if (!esAdminBot) {
@@ -23,7 +22,7 @@ async function cambiarAdmin(sock, jid, msg, accion) {
 
   await sock.groupParticipantsUpdate(jid, [objetivo], accion);
   const texto = accion === 'promote' ? 'Usuario ahora es admin.' : 'Se le quito el admin al usuario.';
-  await sock.sendMessage(jid, { text });
+  await sock.sendMessage(jid, { text: texto });
 }
 
 module.exports = [

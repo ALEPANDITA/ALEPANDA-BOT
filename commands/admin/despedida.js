@@ -3,13 +3,13 @@ const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
 module.exports = [
   {
     name: 'despedida',
-    category: 'general',
+    category: 'admin',
     description: 'Activa/desactiva despedida (ej: .despedida on/off)',
     groupOnly: true,
     execute: async (sock, jid, msg, { texto, prefix }) => {
       const metadata = await sock.groupMetadata(jid);
       const remitente = msg.key.participant;
-      const esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+      const esAdmin = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
 
       if (!esAdmin) {
         return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
@@ -35,13 +35,13 @@ module.exports = [
   },
   {
     name: 'setdespedida',
-    category: 'general',
+    category: 'admin',
     description: 'Cambia el texto de despedida. Usa {user} {group}',
     groupOnly: true,
     execute: async (sock, jid, msg, { texto, prefix }) => {
       const metadata = await sock.groupMetadata(jid);
       const remitente = msg.key.participant;
-      const esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+      const esAdmin = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
 
       if (!esAdmin) {
         return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
@@ -64,17 +64,17 @@ module.exports = [
   },
   {
     name: 'setdespedidaimg',
-    category: 'general',
+    category: 'admin',
     description: 'Cambia la imagen de despedida (responde a una imagen)',
     groupOnly: true,
     execute: async (sock, jid, msg) => {
-      const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+      const { downloadMediaMessage } = require('fsociety-Baileys');
       const fs = require('fs');
       const path = require('path');
 
       const metadata = await sock.groupMetadata(jid);
       const remitente = msg.key.participant;
-      const esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+      const esAdmin = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
 
       if (!esAdmin) {
         return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
@@ -100,7 +100,7 @@ module.exports = [
   },
   {
     name: 'deldespedidaimg',
-    category: 'general',
+    category: 'admin',
     description: 'Elimina la imagen de despedida configurada',
     groupOnly: true,
     execute: async (sock, jid, msg) => {
@@ -109,7 +109,7 @@ module.exports = [
 
       const metadata = await sock.groupMetadata(jid);
       const remitente = msg.key.participant;
-      const esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+      const esAdmin = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
 
       if (!esAdmin) {
         return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });

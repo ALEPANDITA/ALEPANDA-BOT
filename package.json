@@ -12,9 +12,9 @@
   "type": "commonjs",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "chalk": "^4.1.2",
     "figlet": "^1.11.0",
+    "fsociety-Baileys": "github:DevYerZx/fsociety-Baileys",
     "gradient-string": "^3.0.0",
     "pino": "^10.3.1",
     "qrcode-terminal": "^0.12.0",

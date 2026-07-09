@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('fsociety-Baileys');
 const chalk = require('chalk');
 const figlet = require('figlet');
 const gradient = require('gradient-string');
@@ -44,8 +44,17 @@ function mostrarBanner() {
   console.log('');
 }
 
+process.on('uncaughtException', (err) => {
+  console.error('Error no capturado:', err.message);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Promesa rechazada sin manejar:', err?.message || err);
+});
+
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+  const { version } = await fetchLatestBaileysVersion();
 
   mostrarBanner();
 
@@ -60,6 +69,7 @@ async function startBot() {
   }
 
   const sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: false,
     logger: pino({ level: 'silent' })
@@ -95,11 +105,10 @@ async function startBot() {
   });
 
   sock.ev.on('creds.update', saveCreds);
-sock.ev.on('group-participants.update', async (update) => {
+
+  sock.ev.on('group-participants.update', async (update) => {
     const { id: jid, participants, action } = update;
     const { leerDB, getGrupo } = require('./lib/db');
-    const fs = require('fs');
-    const path = require('path');
 
     const db = leerDB();
     const grupo = getGrupo(db, jid);
@@ -112,7 +121,8 @@ sock.ev.on('group-participants.update', async (update) => {
     }
 
     for (const participante of participants) {
-      const numero = participante.split('@')[0];
+      const participanteId = typeof participante === 'string' ? participante : participante.id;
+      const numero = participanteId.split('@')[0];
 
       if (action === 'add' && grupo.bienvenida) {
         let texto = grupo.textoBienvenida || 'Bienvenido/a {user} al grupo {group}!';
@@ -125,9 +135,9 @@ sock.ev.on('group-participants.update', async (update) => {
         const imgPath = path.join(__dirname, 'assets', 'bienvenida', `${jid.replace('@g.us', '')}.jpg`);
         if (fs.existsSync(imgPath)) {
           const buffer = fs.readFileSync(imgPath);
-          await sock.sendMessage(jid, { image: buffer, caption: texto, mentions: [participante] });
+          await sock.sendMessage(jid, { image: buffer, caption: texto, mentions: [participanteId] });
         } else {
-          await sock.sendMessage(jid, { text: texto, mentions: [participante] });
+          await sock.sendMessage(jid, { text: texto, mentions: [participanteId] });
         }
       }
 
@@ -138,27 +148,54 @@ sock.ev.on('group-participants.update', async (update) => {
         const imgPath = path.join(__dirname, 'assets', 'despedida', `${jid.replace('@g.us', '')}.jpg`);
         if (fs.existsSync(imgPath)) {
           const buffer = fs.readFileSync(imgPath);
-          await sock.sendMessage(jid, { image: buffer, caption: texto, mentions: [participante] });
+          await sock.sendMessage(jid, { image: buffer, caption: texto, mentions: [participanteId] });
         } else {
-          await sock.sendMessage(jid, { text: texto, mentions: [participante] });
+          await sock.sendMessage(jid, { text: texto, mentions: [participanteId] });
         }
       }
     }
   });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
+    console.log('MENSAJE RECIBIDO, total:', messages.length);
     const msg = messages[0];
+    console.log('PASO 1: msg.message existe?', !!msg?.message, 'fromMe?', msg?.key?.fromMe);
     if (!msg.message || msg.key.fromMe) return;
 
     const config = leerConfig();
-    const prefix = config.prefix || '.';
 
     const jid = msg.key.remoteJid;
     const texto = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
     const esGrupo = jid.endsWith('@g.us');
 
+    let prefix = config.prefix || '.';
+    if (esGrupo) {
+      const { leerDB: leerDBPrefix, getGrupo: getGrupoPrefix } = require('./lib/db');
+      const dbPrefix = leerDBPrefix();
+      const grupoPrefix = getGrupoPrefix(dbPrefix, jid);
+      if (grupoPrefix.prefix) prefix = grupoPrefix.prefix;
+    }
+
+    const botonId = msg.message?.templateButtonReplyMessage?.selectedId;
+    if (botonId && botonId.includes('|')) {
+      const [comandoBoton, urlBoton] = botonId.split('|');
+      const comandoEncontrado = comandos.get(comandoBoton);
+      if (comandoEncontrado) {
+        const textoFalso = `${prefix}${comandoBoton} ${urlBoton}`;
+        try {
+          await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
+          await comandoEncontrado.execute(sock, jid, msg, { prefix, texto: textoFalso, comandos });
+        } catch (err) {
+          console.error(err);
+          await sock.sendMessage(jid, { text: 'Ocurrio un error al procesar la descarga.' });
+        }
+      }
+      return;
+    }
+
     if (esGrupo) {
       const { leerDB, guardarDB, getUsuario, getGrupo } = require('./lib/db');
+      const { darXp } = require('./lib/niveles');
       const db = leerDB();
       const remitente = msg.key.participant;
       const usuario = getUsuario(db, remitente);
@@ -168,7 +205,16 @@ sock.ev.on('group-participants.update', async (update) => {
       if (!grupo.mensajes) grupo.mensajes = {};
       grupo.actividad[remitente] = Date.now();
       grupo.mensajes[remitente] = (grupo.mensajes[remitente] || 0) + 1;
+
+      const resultado = grupo.niveles ? darXp(usuario) : null;
       guardarDB(db);
+
+      if (resultado?.subioNivel) {
+        await sock.sendMessage(jid, {
+          text: `🎉 @${remitente.split('@')[0]} subio al nivel *${resultado.nivelNuevo}*!`,
+          mentions: [remitente]
+        });
+      }
 
       if (usuario.muteado) {
         await sock.sendMessage(jid, { delete: msg.key });
@@ -187,6 +233,7 @@ sock.ev.on('group-participants.update', async (update) => {
       }
     }
 
+    console.log('DEBUG texto:', JSON.stringify(texto), 'prefix:', JSON.stringify(prefix), 'startsWith?', texto.startsWith(prefix));
     if (!texto.startsWith(prefix)) return;
 
     const args = texto.slice(prefix.length).trim().split(/\s+/);
@@ -199,7 +246,50 @@ sock.ev.on('group-participants.update', async (update) => {
       return sock.sendMessage(jid, { text: 'Este comando solo funciona dentro de un grupo.' });
     }
 
+    if (esGrupo) {
+      const { leerDB, getGrupo } = require('./lib/db');
+      const dbCheck = leerDB();
+      const grupoCheck = getGrupo(dbCheck, jid);
+      const remitenteCheck = msg.key.participant;
+      const esOwnerCheck = config.owners && config.owners.includes(remitenteCheck);
+
+      let metadataCheck = null;
+      let esAdminCheck = false;
+
+      if (grupoCheck.soloAdmins || (grupoCheck.permisosCategorias && Object.keys(grupoCheck.permisosCategorias).length)) {
+        metadataCheck = await sock.groupMetadata(jid);
+          console.log("DEBUG PARTICIPANTS:", JSON.stringify(metadataCheck.participants.map(p => ({ id: p.id, phoneNumber: p.phoneNumber, admin: p.admin }))));
+          let remitenteResuelto = remitenteCheck;
+          try {
+            const [info] = await sock.onWhatsApp(remitenteCheck);
+            if (info?.lid) remitenteResuelto = info.lid;
+          } catch (e) {}
+          const remitenteNum = remitenteResuelto.split("@")[0];
+          esAdminCheck = metadataCheck.participants.find(p => {
+            const pId = (p.id || "").split("@")[0];
+            const pPhone = (p.phoneNumber || "").split("@")[0];
+            return pId === remitenteNum || pPhone === remitenteNum || pId === remitenteCheck.split("@")[0];
+          })?.admin;
+      }
+
+      console.log('DEBUG MSG KEY:', JSON.stringify(msg.key));
+      console.log('DEBUG PERMISOS -> remitente:', remitenteCheck, '| esAdminCheck:', esAdminCheck, '| esOwnerCheck:', esOwnerCheck, '| soloAdmins:', grupoCheck.soloAdmins);
+      if (grupoCheck.soloAdmins && !esAdminCheck && !esOwnerCheck) {
+        return;
+      }
+
+      const categoriaComando = comando.category || 'general';
+      const permisoCategoria = grupoCheck.permisosCategorias?.[categoriaComando];
+
+      if (permisoCategoria === 'admins' && !esAdminCheck && !esOwnerCheck) {
+        return sock.sendMessage(jid, {
+          text: `Los comandos de la categoria *${categoriaComando}* solo pueden ser usados por admins.`
+        });
+      }
+    }
+
     try {
+      await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
       await comando.execute(sock, jid, msg, { prefix, texto, comandos });
     } catch (err) {
       console.error(err);

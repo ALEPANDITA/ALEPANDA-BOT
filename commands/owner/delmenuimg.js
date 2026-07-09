@@ -1,6 +1,7 @@
 const { leerConfig } = require('../../lib/config');
 const fs = require('fs');
 const path = require('path');
+const { resolverLid, mismoUsuario } = require('../../lib/permisos');
 
 const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
 
@@ -11,8 +12,11 @@ module.exports = {
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
     const remitente = msg.key.participant || msg.key.remoteJid;
+    const remitenteResuelto = await resolverLid(sock, remitente);
 
-    if (!config.owners || !config.owners.includes(remitente)) {
+    const esOwner = config.owners && config.owners.some(o => mismoUsuario(o, remitente) || mismoUsuario(o, remitenteResuelto));
+
+    if (!esOwner) {
       return sock.sendMessage(jid, { text: 'Solo un owner del bot puede usar este comando.' });
     }
 

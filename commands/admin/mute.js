@@ -3,7 +3,7 @@ const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
 async function cambiarMute(sock, jid, msg, accion) {
   const metadata = await sock.groupMetadata(jid);
   const remitente = msg.key.participant || msg.key.remoteJid;
-  const participante = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente);
+  const participante = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente);
 
   if (!participante?.admin) {
     return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });

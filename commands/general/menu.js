@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
-const ordenCategorias = ['general', 'download', 'casino', 'fun', 'owner', 'anime'];
+const ordenCategorias = ['general', 'download', 'casino', 'fun', 'admin', 'owner', 'anime'];
 
 function saludoSegunHora() {
   const hora = new Date().getHours();
@@ -47,7 +47,8 @@ module.exports = {
       casino: 'CASINO',
       fun: 'DIVERSION',
       owner: 'OWNER',
-      anime: 'ANIME'
+      anime: 'ANIME',
+      admin: 'ADMINISTRACION'
     };
 
     for (const cat of categoriasOrdenadas) {
