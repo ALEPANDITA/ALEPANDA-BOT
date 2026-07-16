@@ -1,0 +1,6 @@
+node_modules/
+auth_info/
+database.json
+api-keys.json
+assets/menu.jpg
+*.log

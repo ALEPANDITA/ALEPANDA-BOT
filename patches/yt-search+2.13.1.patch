@@ -1,0 +1,34 @@
+diff --git a/node_modules/yt-search/dist/yt-search.js b/node_modules/yt-search/dist/yt-search.js
+index 3e65db0..7897e1f 100644
+--- a/node_modules/yt-search/dist/yt-search.js
++++ b/node_modules/yt-search/dist/yt-search.js
+@@ -282,7 +282,8 @@ function getSearchResults(_options, callback) {
+     'user-agent': _userAgent,
+     'accept': 'text/html',
+     'accept-encoding': 'gzip',
+-    'accept-language': 'en-US'
++    'accept-language': 'en-US',
++    'cookie': 'CONSENT=YES+1'
+   };
+   debug(params);
+   debug('getting results: ' + _options.currentPage);
+@@ -670,7 +671,8 @@ function getVideoMetaData(opts, callback) {
+     'user-agent': _userAgent,
+     'accept': 'text/html',
+     'accept-encoding': 'gzip',
+-    'accept-language': "".concat(hl, "-").concat(gl)
++    'accept-language': "".concat(hl, "-").concat(gl),
++    'cookie': 'CONSENT=YES+1'
+   };
+   params.headers['user-agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Safari/605.1.15';
+   _dasu.req(params, function (err, res, body) {
+@@ -841,7 +843,8 @@ function getPlaylistMetaData(opts, callback) {
+     'user-agent': _userAgent,
+     'accept': 'text/html',
+     'accept-encoding': 'gzip',
+-    'accept-language': "".concat(hl, "-").concat(gl)
++    'accept-language': "".concat(hl, "-").concat(gl),
++    'cookie': 'CONSENT=YES+1'
+   };
+   _dasu.req(params, function (err, res, body) {
+     if (err) {
