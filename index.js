@@ -518,9 +518,13 @@ async function startBot() {
       const grupoNsfw = getGrupo(dbNsfw, jid);
 
       if (!grupoNsfw.nsfw) {
-        return sock.sendMessage(jid, {
-          text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.`
-        });
+        return sock.sendMessage(
+          jid,
+          {
+            text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.`
+          },
+          { quoted: msg }
+        );
       }
     }
 
