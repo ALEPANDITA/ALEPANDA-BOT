@@ -8,16 +8,16 @@ module.exports = {
 
   async execute(sock, jid, msg) {
     const frases = [
-      '{autor} se arrodillo ante {objetivo} y empezo a saborearlo con una entrega descarada. 👅',
-      '{autor} volvio loca a {objetivo} con una lengua traviesa que no penso detenerse. 🔥',
-      '{objetivo} se derritio cuando {autor} decidio provocarla justo donde mas temblaba. 😈',
-      '{autor} devoro a {objetivo} con paciencia sucia y una hambre imposible de esconder. 🖤',
-      '{autor} hizo gemir a {objetivo} con una devocion tan humeda como pecaminosa. 💦',
-      '{objetivo} apenas podia mantenerse firme mientras {autor} la llevaba directo al borde. 😵‍💫',
-      '{autor} se perdio entre las piernas de {objetivo} como si no existiera nada mas. 💋',
-      '{autor} desperto a {objetivo} a punta de lamidas lentas y muy malportadas. 😏',
-      '{objetivo} termino rendida ante la lengua insistente y peligrosa de {autor}. 🔞',
-      '{autor} tomo el control del placer de {objetivo} y lo llevo hasta el exceso. 🥵'
+      '{autor} se hundió entre las piernas de {objetivo} y se comió su coño hasta el último jugo. 👅',
+      '{autor} lamió el coño de {objetivo} como un perro sediento, sin parar ni un segundo. 🔥',
+      '{objetivo} se corrió en la cara de {autor} mientras le metía la lengua hasta el fondo. 😈',
+      '{autor} chupó el clítoris de {objetivo} con tanta fuerza que la hizo gritar como una loca. 🖤',
+      '{autor} devoró el coño de {objetivo} hasta dejarlo rojo y hinchado de tanto lamer. 💦',
+      '{objetivo} agarró de los pelos a {autor} y la ahogó contra su coño hasta casi ahogarla. 😵‍💫',
+      '{autor} metió dos dedos en el coño de {objetivo} mientras se lamía toda su leche. 💋',
+      '{autor} despertó a {objetivo} lamiéndole el culo y el coño hasta hacerla correrse en la cama. 😏',
+      '{objetivo} terminó temblando cuando {autor} le mordió el clítoris y la hizo correrse a gritos. 🔞',
+      '{autor} se trago toda la corrida de {objetivo} y luego la folló hasta dejarla sin sentido. 🥵'
     ];
 
     await enviarReactionDelirius(sock, jid, msg, 'pussylick', frases);
