@@ -8,16 +8,16 @@ module.exports = {
 
   async execute(sock, jid, msg) {
     const frases = [
-      '{autor} termino explotando sobre {objetivo} en un final tan intenso como indecente. 💦',
-      '{autor} no pudo contenerse mas y dejo a {objetivo} empapado de puro deseo. 😵‍💫',
-      '{objetivo} quedo marcado por el desenlace ardiente que {autor} venia aguantando. 🔥',
-      '{autor} alcanzo el limite con {objetivo} y solto toda la tension de golpe. 🖤',
-      '{autor} se vino sobre {objetivo} con una intensidad que hizo arder el momento. 😈',
-      '{objetivo} apenas pudo procesar lo que {autor} acababa de desatar sobre su cuerpo. 💥',
-      '{autor} cerro la escena con {objetivo} de la forma mas humeda y atrevida posible. 💋',
-      '{autor} termino derramando todo sobre {objetivo} mientras el ambiente se volvia caos. 🥵',
-      '{objetivo} recibio el final mas descarado que {autor} podia darle. 🔞',
-      '{autor} no dejo ni una pizca de duda de lo mucho que {objetivo} lo habia provocado. 😏'
+      '{autor} se corrió encima de {objetivo} como un caballo, bañándolo en lefa. 💦',
+      '{autor} no aguantó más y llenó a {objetivo} de su semen caliente. 😵‍💫',
+      '{objetivo} quedó marcado por la corrida explosiva de {autor}. 🔥',
+      '{autor} eyaculó sobre {objetivo} con una fuerza que lo hizo temblar. 🖤',
+      '{autor} se vino en la cara de {objetivo} sin piedad ni aviso. 😈',
+      '{objetivo} apenas pudo reaccionar cuando {autor} lo bañó entero. 💥',
+      '{autor} cerró la escena regando a {objetivo} con toda su leche. 💋',
+      '{autor} terminó derramando su esencia sobre {objetivo} hasta el último gota. 🥵',
+      '{objetivo} recibió la corrida más salvaje que {autor} podía darle. 🔞',
+      '{autor} dejó a {objetivo} hecho un moco de tanto semen que le echó. 😏'
     ];
 
     await enviarReactionDelirius(sock, jid, msg, 'cum', frases);
