@@ -1,7 +1,7 @@
 const { enviarNsfwDirecto } = require('../../lib/nsfwDirecto');
 
 module.exports = {
-  name: 'tiktok',
+  name: 'hubtiktok',
   aliases: [],
   category: 'nsfw',
   groupOnly: true,
@@ -20,6 +20,6 @@ module.exports = {
       '{autor} destapo un tiktok prohibido que viene fuertecito. 🔥'
     ];
 
-    await enviarNsfwDirecto(sock, jid, msg, 'tiktok', frases);
+    await enviarNsfwDirecto(sock, jid, msg, 'tiktok', 'video', frases);
   }
 };
