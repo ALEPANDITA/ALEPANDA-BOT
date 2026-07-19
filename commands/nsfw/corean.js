@@ -20,6 +20,6 @@ module.exports = {
       '{autor} saco un clip corean tan hot que mejor ni preguntar de donde salio. 🔥'
     ];
 
-    await enviarNsfwDirecto(sock, jid, msg, 'corean', frases);
+    await enviarNsfwDirecto(sock, jid, msg, 'corean', 'image', frases);
   }
 };
