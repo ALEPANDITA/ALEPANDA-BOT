@@ -8,17 +8,17 @@ module.exports = {
 
   async execute(sock, jid, msg) {
     const frases = [
-      '{autor} arrincono a {objetivo} contra la pared y la noche tomo un rumbo demasiado intenso. 🥵',
-      '{autor} no le dio escapatoria a {objetivo} y termino desatando una escena bastante atrevida. 🔥',
-      '{autor} jalo a {objetivo} con firmeza y lo envolvio en un momento subido de tono. 😈',
-      '{autor} tenia otras intenciones con {objetivo}, y vaya que las dejo claritas. 💋',
-      '{objetivo} quedo a merced de {autor}, que venia con ganas de portarse muy mal. 😏',
-      '{autor} sorprendio a {objetivo} con una embestida tan intensa que el chat entero sintio la tension. 💥',
-      '{autor} se adueño del momento con {objetivo} y encendio todo alrededor. 🖤',
-      '{autor} llevo a {objetivo} al limite con una jugada descarada y sin vergüenza. 🥀',
-      '{autor} tomo el control de {objetivo} y convirtio el instante en puro fuego. 🔞',
-      '{autor} termino provocando a {objetivo} de una forma tan salvaje que ya no hubo vuelta atras. 😵‍💫'
-    ];
+      '{autor} follando a {objetivo} sin compasión, rompiéndolo todo. 💦',
+      '{autor} cogiendo a {objetivo} como una perra en celo. 🔥',
+      '{autor} metiéndosela a {objetivo} hasta el fondo, sin tregua. 😈',
+      '{autor} violando a {objetivo} con la mirada antes de con el cuerpo. 🖤',
+      '{objetivo} siendo usada como puto por {autor}, sangrando de placer. 🥵',
+      '{autor} embistiendo a {objetivo} como animal, hasta dejarlo sin aliento. 💥',
+      '{autor} jodiendo a {objetivo} contra la pared, hasta quebrarla. 🔞',
+      '{autor} penetrando a {objetivo} salvajemente, sin lubricación. 😵‍💫',
+      '{autor} eyaculando dentro de {objetivo} marcando su territorio. 🥀',
+      '{autor} destruyendo a {objetivo} a pollazos, hasta dejarlo inservible. 💋'
+  ];
 
     await enviarReactionDelirius(sock, jid, msg, 'anal', frases);
   }
