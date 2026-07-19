@@ -20,6 +20,6 @@ module.exports = {
       '{autor} abrio girls y el resultado quedo demasiado hot para ignorarlo. 🔥'
     ];
 
-    await enviarNsfwDirecto(sock, jid, msg, 'girls', frases);
+    await enviarNsfwDirecto(sock, jid, msg, 'girls', 'image', frases);
   }
 };
