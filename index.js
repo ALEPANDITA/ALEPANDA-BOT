@@ -24,7 +24,8 @@ const EMOJIS_POR_CATEGORIA = {
   ia: '🤖',
   general: 'ℹ️',
   perfil: '🪪',
-  default: '⚡'
+  default: '⚡',
+  nsfw: '💗'
 };
 
 // Quita acentos y pasa a minusculas, para que .menu .Menu .MENU .menú funcionen igual
