@@ -8,16 +8,16 @@ module.exports = {
 
   async execute(sock, jid, msg) {
     const frases = [
-      '{autor} atrapo a {objetivo} en un momento demasiado intimo y lo dejo sin aliento. 😮‍💨',
-      '{autor} se arrodillo frente a {objetivo} con una mirada que ya lo decia todo. 😈',
-      '{autor} empezo a provocar a {objetivo} de una forma tan descarada que el ambiente se derritio. 🔥',
-      '{objetivo} apenas pudo reaccionar cuando {autor} tomo la iniciativa sin ninguna pena. 💋',
-      '{autor} acorralo a {objetivo} y convirtio el instante en puro deseo. 🖤',
-      '{autor} dejo a {objetivo} completamente a merced de una tentacion imposible de ignorar. 🥵',
-      '{autor} sabia exactamente como volver loco a {objetivo}, y lo demostro sin miedo. 😏',
-      '{objetivo} termino temblando cuando {autor} se puso demasiado jugueton. 💦',
-      '{autor} se entrego al momento con {objetivo} y encendio todo el chat. 🔞',
-      '{autor} llevo a {objetivo} a un punto donde ya no habia forma de mantener la calma. 😵'
+      '{autor} se arrodilló y se tragó la verga de {objetivo} hasta las bolas. 😮‍💨',
+      '{autor} metió toda la polla de {objetivo} en su garganta hasta ahogarse. 😈',
+      '{autor} succionó a {objetivo} con tanta hambre que lo dejó seco en segundos. 🔥',
+      '{objetivo} agarró de la cabeza a {autor} y la folló en la boca sin piedad. 💋',
+      '{autor} lamió el culo de {objetivo} antes de devorarle la verga entera. 🖤',
+      '{objetivo} se vino en la garganta de {autor} obligándolo/a a tragarlo todo. 🥵',
+      '{autor} mamó a {objetivo} como una experta, jugando con sus bolas. 😏',
+      '{objetivo} usó la boca de {autor} como un coño y la llenó de semen. 💦',
+      '{autor} terminó con la cara de {objetivo} empapada después de tanta succión. 🔞',
+      '{autor} pidió a gritos que {objetivo} se corriera en su boca cara de puto/a. 😵'
     ];
 
     await enviarReactionDelirius(sock, jid, msg, 'blowjob', frases);
