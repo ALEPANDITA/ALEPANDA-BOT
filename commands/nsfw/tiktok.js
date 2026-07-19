@@ -2,7 +2,7 @@ const { enviarNsfwDirecto } = require('../../lib/nsfwDirecto');
 
 module.exports = {
   name: 'hubtiktok',
-  aliases: [],
+  aliases: ['hudtt'],
   category: 'nsfw',
   groupOnly: true,
 
