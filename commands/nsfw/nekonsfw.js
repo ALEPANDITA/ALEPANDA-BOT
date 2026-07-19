@@ -8,16 +8,16 @@ module.exports = {
 
   async execute(sock, jid, msg) {
     const frases = [
-      '{autor} acerco a {objetivo} a una neko traviesa que venia cargada de malas intenciones. 🐾',
-      '{autor} puso a {objetivo} frente a una escena neko tan subida de tono que nadie quedo sano. 😈',
-      '{objetivo} cayo rendido ante el juego atrevido que {autor} le preparo con esa neko. 💗',
-      '{autor} solto a la neko sobre {objetivo} y el caos sexy comenzo al instante. 🔥',
-      '{autor} envolvio a {objetivo} en caricias felinas que terminaron siendo demasiado provocadoras. 🖤',
-      '{objetivo} no esperaba que {autor} trajera una neko con tanta picardia encima. 😏',
-      '{autor} desato un momento salvaje con {objetivo} y una neko lista para pecar. 🐱',
-      '{autor} hizo que {objetivo} se perdiera entre garras suaves y tentaciones peligrosas. 💋',
-      '{objetivo} termino completamente hechizado por la neko que {autor} invoco para el. 🥵',
-      '{autor} lanzo sobre {objetivo} una fantasia neko que cruzo todas las lineas. 🔞'
+      '{autor} empujó a {objetivo} contra la neko y la obligó a mamarle la verga. 🐾',
+      '{autor} ordenó a la neko montarse en {objetivo} y follárselo hasta romperlo. 😈',
+      '{objetivo} gritó cuando la neko clavó sus garras en su espalda mientras lo montaba. 💗',
+      '{autor} sostuvo a {objetivo} mientras la neko se lo tragaba entero, sin piedad. 🔥',
+      '{autor} vio cómo la neko lamía el coño de {objetivo} hasta hacerla correrse como una perra. 🖤',
+      '{objetivo} se corrió dentro de la neko mientras {autor} los observaba, excitado. 😏',
+      '{autor} folló a la neko por detrás mientras esta lamió los pies de {objetivo}. 🐱',
+      '{autor} ató a {objetivo} y obligó a la neko a sentarse en su cara hasta ahogarlo. 💋',
+      '{objetivo} terminó con la cara de la neko empapada después de que {autor} la hiciera su puto. 🥵',
+      '{autor} filmó mientras la neko orinaba sobre {objetivo} marcándolo como su propiedad. 🔞'
     ];
 
     await enviarReactionDelirius(sock, jid, msg, 'nekonsfw', frases);
