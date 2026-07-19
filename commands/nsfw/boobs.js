@@ -20,6 +20,6 @@ module.exports = {
       '{autor} trajo unas boobs que vienen listas para incendiar el chat. 🔥'
     ];
 
-    await enviarNsfwDirecto(sock, jid, msg, 'boobs', frases);
+    await enviarNsfwDirecto(sock, jid, msg, 'boobs', 'image', frases);
   }
 };
