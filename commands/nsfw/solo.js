@@ -18,16 +18,16 @@ module.exports = {
     const tagAutor = `@${autor.split('@')[0]}`;
 
     const frases = [
-      `${tagAutor} decidio complacerse a solas y subir la temperatura sin ayuda de nadie. 🔥`,
-      `${tagAutor} se monto su propio espectaculo privado y dejo a todos imaginando demasiado. 😈`,
-      `${tagAutor} se dejo llevar por el placer en solitario como si nadie estuviera mirando. 🖤`,
-      `${tagAutor} se encerro en su fantasia y convirtio el momento en puro vicio. 💦`,
-      `${tagAutor} empezo a jugar consigo mismo y el ambiente se puso peligrosamente caliente. 🥵`,
-      `${tagAutor} se regalo un momento demasiado intimo y demasiado delicioso para ocultarlo. 💋`,
-      `${tagAutor} decidio perderse en su propio placer sin pedir permiso a nadie. 😏`,
-      `${tagAutor} se puso comodo, se dejo llevar y termino armando un show bastante atrevido. 🔞`,
-      `${tagAutor} prefirio entretenerse solo y vaya que supo hacerlo de la forma mas sucia. 😮‍💨`,
-      `${tagAutor} se abandono al deseo y disfruto a solas hasta encender todo el chat. 🌙`
+      `${tagAutor} se puso a masturbarse como un poseso hasta correrse en su propia mano. 🔥`,
+      `${tagAutor} se agarró la verga/coño y se folló a sí mismo hasta no poder más. 😈`,
+      `${tagAutor} se tocó sin vergüenza hasta que su semen/leche salió disparado por doquier. 🖤`,
+      `${tagAutor} se corrió tan fuerte que manchó todo de su propia mierda caliente. 💦`,
+      `${tagAutor} se folló la mano como si fuera el último coño/culo del mundo. 🥵`,
+      `${tagAutor} se metió los dedos hasta el fondo y se corrió gritando como un puto/a. 💋`,
+      `${tagAutor} se masturbó hasta dejar su verga/coño rojo y hinchado de tanto frotar. 😏`,
+      `${tagAutor} se corrió en la cama y luego se lamió toda su mierda como un cerdo. 🔞`,
+      `${tagAutor} se folló un dildo y se corrió tan fuerte que casi se desmaya de placer. 😮‍💨`,
+      `${tagAutor} se masturbó hasta quedar seco/a y luego se bebió su propia semen/leche. 🌙`
     ];
 
     const caption = elegirAleatorio(frases);
