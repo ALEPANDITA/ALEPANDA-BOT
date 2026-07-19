@@ -512,6 +512,18 @@ async function startBot() {
       }
     }
 
+    if (esGrupo && comando.category === 'nsfw') {
+      const { leerDB, getGrupo } = require('./lib/db');
+      const dbNsfw = leerDB();
+      const grupoNsfw = getGrupo(dbNsfw, jid);
+
+      if (!grupoNsfw.nsfw) {
+        return sock.sendMessage(jid, {
+          text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.`
+        });
+      }
+    }
+
     try {
       const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
       await sock.sendMessage(jid, { react: { text: emojiCategoria, key: msg.key } });
