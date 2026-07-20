@@ -310,6 +310,49 @@ async function startBot() {
       if (grupoPrefix.prefix) prefix = grupoPrefix.prefix;
     }
 
+    // Respuesta a una propuesta de matrimonio (reply con "si" o "no", sin necesitar comando)
+    const { propuestasPorMensaje, limpiarExpiradas } = require('./lib/matrimonio');
+    limpiarExpiradas();
+    const stanzaIdRespuesta = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
+    if (stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
+      const propuesta = propuestasPorMensaje.get(stanzaIdRespuesta);
+      const remitenteRespuesta = msg.key.participant || msg.key.remoteJid;
+
+      if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) {
+        const respuestaTexto = texto.trim().toLowerCase();
+
+        if (respuestaTexto === 'si' || respuestaTexto === 'sí') {
+          propuestasPorMensaje.delete(stanzaIdRespuesta);
+          const { leerDB: leerDBCasar, guardarDB: guardarDBCasar, getUsuario: getUsuarioCasar } = require('./lib/db');
+          const dbCasar = leerDBCasar();
+          const perfilDe = getUsuarioCasar(dbCasar, propuesta.de);
+          const perfilPara = getUsuarioCasar(dbCasar, propuesta.para);
+
+          if (perfilDe.pareja || perfilPara.pareja) {
+            await sock.sendMessage(propuesta.jid, { text: 'Una de las dos personas ya esta casada, la propuesta ya no es valida.' });
+          } else {
+            perfilDe.pareja = propuesta.para;
+            perfilPara.pareja = propuesta.de;
+            guardarDBCasar(dbCasar);
+            await sock.sendMessage(propuesta.jid, {
+              text: `💒 @${propuesta.de.split('@')[0]} y @${propuesta.para.split('@')[0]} ahora estan casados! Felicidades 🎉`,
+              mentions: [propuesta.de, propuesta.para]
+            });
+          }
+          return;
+        }
+
+        if (respuestaTexto === 'no') {
+          propuestasPorMensaje.delete(stanzaIdRespuesta);
+          await sock.sendMessage(propuesta.jid, {
+            text: `💔 @${propuesta.para.split('@')[0]} rechazo la propuesta de @${propuesta.de.split('@')[0]}.`,
+            mentions: [propuesta.de, propuesta.para]
+          });
+          return;
+        }
+      }
+    }
+
     const botonId = msg.message?.templateButtonReplyMessage?.selectedId;
     if (botonId && botonId.includes('|')) {
       const [comandoBoton, urlBoton] = botonId.split('|');

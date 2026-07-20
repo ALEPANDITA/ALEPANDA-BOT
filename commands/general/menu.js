@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
+const videoPath = path.join(__dirname, '..', '..', 'assets', 'menu.mp4');
 const ordenCategorias = ['general', 'download', 'casino', 'gacha', 'gacha-anime', 'fun', 'admin', 'owner', 'economia', 'perfil', 'anime', 'ia', 'tools'];
 
 const EMOJI_CATEGORIA = {
@@ -101,7 +102,10 @@ module.exports = {
     texto += `✧ Escribe el comando tal como aparece arriba (con el prefijo incluido).\n`;
     texto += `✧ Mischief managed. 🖋️`;
 
-    if (fs.existsSync(imagePath)) {
+    if (fs.existsSync(videoPath)) {
+      const buffer = fs.readFileSync(videoPath);
+      await sock.sendMessage(jid, { video: buffer, caption: texto, gifPlayback: true });
+    } else if (fs.existsSync(imagePath)) {
       const buffer = fs.readFileSync(imagePath);
       await sock.sendMessage(jid, { image: buffer, caption: texto });
     } else {
