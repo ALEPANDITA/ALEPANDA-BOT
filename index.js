@@ -9,6 +9,8 @@ const pino = require('pino');
 
 const { leerConfig } = require('./lib/config');
 const { esOwnerBot } = require('./lib/permisos');
+const { propuestasPorMensaje, limpiarExpiradas } = require('./lib/matrimonio');
+const { leerDB: leerDBCasar, guardarDB: guardarDBCasar, getUsuario: getUsuarioCasar } = require('./lib/db');
 
 const fs = require('fs');
 const path = require('path');
@@ -24,7 +26,8 @@ const EMOJIS_POR_CATEGORIA = {
   ia: '🤖',
   general: 'ℹ️',
   perfil: '🪪',
-  default: '⚡'
+  default: '⚡',
+  nsfw: '💗'
 };
 
 // Quita acentos y pasa a minusculas, para que .menu .Menu .MENU .menú funcionen igual
@@ -309,6 +312,47 @@ async function startBot() {
       if (grupoPrefix.prefix) prefix = grupoPrefix.prefix;
     }
 
+    // Respuesta a una propuesta de matrimonio (reply con "si" o "no", sin necesitar comando)
+    limpiarExpiradas();
+    const stanzaIdRespuesta = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
+    if (stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
+      const propuesta = propuestasPorMensaje.get(stanzaIdRespuesta);
+      const remitenteRespuesta = msg.key.participant || msg.key.remoteJid;
+
+      if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) {
+        const respuestaTexto = texto.trim().toLowerCase();
+
+        if (respuestaTexto === 'si' || respuestaTexto === 'sí') {
+          propuestasPorMensaje.delete(stanzaIdRespuesta);
+          const dbCasar = leerDBCasar();
+          const perfilDe = getUsuarioCasar(dbCasar, propuesta.de);
+          const perfilPara = getUsuarioCasar(dbCasar, propuesta.para);
+
+          if (perfilDe.pareja || perfilPara.pareja) {
+            await sock.sendMessage(propuesta.jid, { text: 'Una de las dos personas ya esta casada, la propuesta ya no es valida.' });
+          } else {
+            perfilDe.pareja = propuesta.para;
+            perfilPara.pareja = propuesta.de;
+            guardarDBCasar(dbCasar);
+            await sock.sendMessage(propuesta.jid, {
+              text: `💒 @${propuesta.de.split('@')[0]} y @${propuesta.para.split('@')[0]} ahora estan casados! Felicidades 🎉`,
+              mentions: [propuesta.de, propuesta.para]
+            });
+          }
+          return;
+        }
+
+        if (respuestaTexto === 'no') {
+          propuestasPorMensaje.delete(stanzaIdRespuesta);
+          await sock.sendMessage(propuesta.jid, {
+            text: `💔 @${propuesta.para.split('@')[0]} rechazo la propuesta de @${propuesta.de.split('@')[0]}.`,
+            mentions: [propuesta.de, propuesta.para]
+          });
+          return;
+        }
+      }
+    }
+
     const botonId = msg.message?.templateButtonReplyMessage?.selectedId;
     if (botonId && botonId.includes('|')) {
       const [comandoBoton, urlBoton] = botonId.split('|');
@@ -508,6 +552,22 @@ async function startBot() {
         return sock.sendMessage(jid, {
           text: `Los comandos de la categoria *${categoriaComando}* solo pueden ser usados por admins.`
         });
+      }
+    }
+
+    if (esGrupo && comando.category === 'nsfw') {
+      const { leerDB, getGrupo } = require('./lib/db');
+      const dbNsfw = leerDB();
+      const grupoNsfw = getGrupo(dbNsfw, jid);
+
+      if (!grupoNsfw.nsfw) {
+        return sock.sendMessage(
+          jid,
+          {
+            text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.`
+          },
+          { quoted: msg }
+        );
       }
     }
 
