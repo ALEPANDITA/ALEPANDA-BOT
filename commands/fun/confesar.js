@@ -1,4 +1,5 @@
 const { caja, advertencia, error: cajaError } = require('../../lib/estilo');
+const { guardarConfesion } = require('../../lib/confesiones');
 
 function extraerCodigoInvitacion(texto) {
   const match = texto.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/i);
@@ -48,6 +49,14 @@ module.exports = {
       });
 
       await sock.sendMessage(grupoDestino, { text: textoConfesion });
+
+      guardarConfesion({
+        remitente: (msg.key.participant || msg.key.remoteJid).split('@')[0],
+        confesion,
+        grupoId: grupoDestino,
+        grupoNombre: infoInvitacion.subject,
+        fecha: new Date().toISOString()
+      });
 
       if (jid !== grupoDestino) {
         await sock.sendMessage(jid, {
