@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { exec } = require('child_process');
 const { cargando, advertencia, error: cajaError } = require('../../lib/estilo');
+const { obtenerBusquedaStickerly } = require('../../lib/busquedasStickerly');
 
 function convertirAWebp(buffer) {
   return new Promise((resolve, reject) => {
@@ -33,11 +34,28 @@ module.exports = {
   category: 'fun',
   description: 'Descarga todos los stickers de un pack de sticker.ly a partir de su link',
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const url = texto.slice((prefix + 'stickerly ').length).trim();
+    const entrada = texto.slice((prefix + 'stickerly ').length).trim();
 
-    if (!url || !url.includes('sticker.ly')) {
+    if (!entrada) {
       return sock.sendMessage(jid, {
-        text: advertencia(`Uso: ${prefix}stickerly <link de sticker.ly>`, { titulo: 'STICKERLY' })
+        text: advertencia(`Uso: ${prefix}stickerly <link de sticker.ly o numero de ${prefix}stickerlysearch>`, { titulo: 'STICKERLY' })
+      });
+    }
+
+    let url;
+    if (/^\d+$/.test(entrada)) {
+      const delaBusqueda = obtenerBusquedaStickerly(jid, entrada);
+      if (!delaBusqueda) {
+        return sock.sendMessage(jid, {
+          text: advertencia(`No hay una busqueda reciente con ese numero. Usa ${prefix}stickerlysearch primero.`, { titulo: 'SIN RESULTADOS' })
+        });
+      }
+      url = delaBusqueda.url;
+    } else if (entrada.includes('sticker.ly')) {
+      url = entrada;
+    } else {
+      return sock.sendMessage(jid, {
+        text: advertencia(`Uso: ${prefix}stickerly <link de sticker.ly o numero de ${prefix}stickerlysearch>`, { titulo: 'STICKERLY' })
       });
     }
 

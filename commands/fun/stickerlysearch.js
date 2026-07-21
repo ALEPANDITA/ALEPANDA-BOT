@@ -1,4 +1,5 @@
 const { advertencia } = require('../../lib/estilo');
+const { guardarBusquedaStickerly } = require('../../lib/busquedasStickerly');
 
 module.exports = {
   name: 'stickerlysearch',
@@ -26,13 +27,14 @@ module.exports = {
     }
 
     const top = resultados.slice(0, 10);
+    guardarBusquedaStickerly(jid, top);
 
     const lista = top.map((pack, i) => {
-      const animado = pack.isAnimated ? ' 🎬 animado' : '';
-      return `${i + 1}. *${pack.name}*\n   👤 ${pack.author}   🖼️ ${pack.sticker_count} stickers${animado}\n   🔗 ${pack.url}`;
-    }).join('\n\n');
+      const animado = pack.isAnimated ? ' 🎬' : '';
+      return `*${i + 1}.* ${pack.name} — ${pack.sticker_count} stickers${animado}`;
+    }).join('\n');
 
-    const caption = `🔍 Resultados para "*${query}*":\n\n${lista}\n\nUsa *${prefix}stickerly <link>* con cualquiera de estos links para descargar el pack completo.`;
+    const caption = `🔍 Packs para "*${query}*":\n\n${lista}\n\nDescarga cualquiera con *${prefix}stickerly <numero>*\nEj: ${prefix}stickerly 1`;
     const primeraImagen = top[0]?.preview;
 
     try {
