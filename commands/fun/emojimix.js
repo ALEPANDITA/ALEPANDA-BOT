@@ -1,8 +1,47 @@
-const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { exec } = require('child_process');
 const { advertencia, error: cajaError } = require('../../lib/estilo');
+
+const METADATA_URL = 'https://raw.githubusercontent.com/xsalazar/emoji-kitchen-backend/main/app/metadata.json';
+let metadataCache = null;
+
+async function obtenerMetadata() {
+  if (metadataCache) return metadataCache;
+  console.log('[emojimix] Descargando base de datos de Emoji Kitchen (solo la primera vez)...');
+  const res = await fetch(METADATA_URL);
+  if (!res.ok) throw new Error(`No se pudo descargar la base de emojis (HTTP ${res.status})`);
+  metadataCache = await res.json();
+  console.log('[emojimix] Base de datos cargada.');
+  return metadataCache;
+}
+
+function emojiACodepoint(emoji) {
+  return Array.from(emoji)
+    .map(c => c.codePointAt(0))
+    .filter(cp => cp !== 0xFE0F)
+    .map(cp => cp.toString(16))
+    .join('-');
+}
+
+async function buscarCombinacion(emoji1, emoji2) {
+  const metadata = await obtenerMetadata();
+  const cp1 = emojiACodepoint(emoji1);
+  const cp2 = emojiACodepoint(emoji2);
+
+  const combosDirecto = metadata.data[cp1]?.combinations?.[cp2];
+  if (combosDirecto?.length) {
+    return combosDirecto.find(c => c.isLatest) || combosDirecto[0];
+  }
+
+  const combosInverso = metadata.data[cp2]?.combinations?.[cp1];
+  if (combosInverso?.length) {
+    return combosInverso.find(c => c.isLatest) || combosInverso[0];
+  }
+
+  return null;
+}
 
 module.exports = {
   name: 'emojimix',
@@ -20,22 +59,19 @@ module.exports = {
     }
 
     try {
-      const url = `https://tenor.googleapis.com/v2/featured?key=AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v5&q=${encodeURIComponent(emoji1)}_${encodeURIComponent(emoji2)}`;
-      const res = await (await fetch(url)).json();
+      const combinacion = await buscarCombinacion(emoji1, emoji2);
 
-      if (!res.results || res.results.length === 0) {
-        return sock.sendMessage(jid, { text: cajaError('No se encontro una combinacion para esos emojis.') });
+      if (!combinacion) {
+        return sock.sendMessage(jid, { text: cajaError('Esos dos emojis no tienen combinacion en Emoji Kitchen.') });
       }
 
-      const imagenUrl = res.results[0].url;
-      const buffer = Buffer.from(await (await fetch(imagenUrl)).arrayBuffer());
+      const buffer = Buffer.from(await (await fetch(combinacion.gStaticUrl)).arrayBuffer());
 
       const tmpDir = os.tmpdir();
       const inputPath = path.join(tmpDir, `emojimix_in_${Date.now()}.png`);
       const outputPath = path.join(tmpDir, `emojimix_out_${Date.now()}.webp`);
       fs.writeFileSync(inputPath, buffer);
 
-      const { exec } = require('child_process');
       const comando = `ffmpeg -i "${inputPath}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -c:v libwebp -lossless 0 -q:v 75 -y "${outputPath}"`;
 
       await new Promise((resolve, reject) => {
@@ -48,7 +84,7 @@ module.exports = {
       fs.unlinkSync(inputPath);
       fs.unlinkSync(outputPath);
     } catch (err) {
-      console.error(err);
+      console.error('[emojimix]', err);
       await sock.sendMessage(jid, { text: cajaError('No se pudo crear el sticker de emojis.') });
     }
   }
