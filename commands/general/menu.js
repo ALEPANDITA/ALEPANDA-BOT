@@ -1,3 +1,4 @@
+const { leerConfig } = require('../../lib/config');
 const fs = require('fs');
 const path = require('path');
 
@@ -55,6 +56,7 @@ module.exports = {
   description: 'Muestra el menu de comandos',
   execute: async (sock, jid, msg, { prefix, comandos }) => {
     const categorias = {};
+    const emojiComando = leerConfig().menuEmoji || "🪄";
 
     for (const comando of comandos.values()) {
       const cat = comando.category || 'general';
@@ -91,7 +93,7 @@ module.exports = {
 
       for (const c of categorias[cat]) {
         const alias = c.aliases?.length ? ` _(${c.aliases.map(a => prefix + a).join(', ')})_` : '';
-        texto += `│ 🪄 *${prefix}${c.name}*${alias}\n`;
+        texto += `│ ${emojiComando} *${prefix}${c.name}*${alias}\n`;
         texto += `│   _${recortar(c.description || 'Sin descripcion')}_\n`;
       }
 
