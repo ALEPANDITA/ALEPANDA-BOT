@@ -1,3 +1,5 @@
+const { caja, error: cajaError } = require('../../lib/estilo');
+
 const SERVIDORES = [
   { nombre: 'Hetzner (Alemania)', url: 'https://speed.hetzner.de/1MB.bin' },
   { nombre: 'Cloudflare', url: 'https://speed.cloudflare.com/__down?bytes=5000000' },
@@ -39,25 +41,29 @@ module.exports = {
   category: 'general',
   description: 'Prueba aproximada de velocidad de descarga del servidor',
   execute: async (sock, jid, msg) => {
-    await sock.sendMessage(jid, { text: '📶 Probando velocidad, espera unos segundos...' });
-
     for (const servidor of SERVIDORES) {
       const resultado = await probarServidor(servidor);
 
       if (resultado.exito) {
-        return sock.sendMessage(jid, {
-          text: `📶 *SPEEDTEST (aproximado)*\n\n` +
-            `Servidor: ${resultado.servidor}\n` +
-            `Archivo de prueba: ${resultado.mbDescargados} MB\n` +
-            `Tiempo: ${resultado.duracionSeg.toFixed(2)}s\n` +
-            `Velocidad estimada: ${resultado.mbps} Mbps\n\n` +
-            `Nota: esto mide la conexion del servidor donde corre el bot, no la tuya.`
+        const texto = caja([
+          `📡 Servidor: ${resultado.servidor}`,
+          `📦 Archivo de prueba: ${resultado.mbDescargados} MB`,
+          `⏱️ Tiempo: ${resultado.duracionSeg.toFixed(2)}s`,
+          `🚀 Velocidad estimada: ${resultado.mbps} Mbps`
+        ], {
+          titulo: 'SPEEDTEST',
+          pie: 'Mide la conexion del servidor, no la tuya',
+          estilo: 'neon'
         });
+
+        return sock.sendMessage(jid, { text: texto });
       }
 
       console.error(`[speedtest] fallo con ${servidor.nombre}: ${resultado.error}`);
     }
 
-    await sock.sendMessage(jid, { text: 'No se pudo completar la prueba de velocidad (todos los servidores fallaron). Revisa la conexion del servidor.' });
+    await sock.sendMessage(jid, {
+      text: cajaError('No se pudo completar la prueba de velocidad (todos los servidores fallaron).')
+    });
   }
 };
