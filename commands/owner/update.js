@@ -1,7 +1,9 @@
-const { exec } = require('child_process');
+const { promisify } = require('util');
+const execCb = require('child_process').exec;
+const exec = promisify(execCb);
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot } = require('../../lib/permisos');
-const { exito, advertencia, error: cajaError, info } = require('../../lib/estilo');
+const { exito, advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
   name: 'update',
@@ -15,43 +17,39 @@ module.exports = {
       return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS', estilo: 'neon' }) });
     }
 
-    await sock.sendMessage(jid, { text: info('Buscando actualizaciones...', { titulo: 'UPDATE', estilo: 'neon' }) });
+    try {
+      await exec('git fetch', { cwd: process.cwd() });
 
-    exec('git fetch && git status -uno', { cwd: process.cwd() }, async (error, stdout) => {
-      if (error) {
-        console.error(error);
-        return sock.sendMessage(jid, { text: cajaError('Ocurrio un error al buscar actualizaciones. Verifica que el bot este conectado a un repositorio de git.', { estilo: 'neon' }) });
-      }
+      const { stdout: cambiosLog } = await exec('git log HEAD..origin/main --pretty=format:"• %s"', { cwd: process.cwd() });
 
-      if (stdout.includes('up to date') || stdout.includes('up-to-date')) {
-        return sock.sendMessage(jid, { text: exito('El bot ya esta en la ultima version.', { titulo: 'UPDATE', estilo: 'neon' }) });
-      }
-
-      await sock.sendMessage(jid, { text: info('Descargando cambios nuevos...', { titulo: 'UPDATE', estilo: 'neon' }) });
-
-      exec('git pull', { cwd: process.cwd() }, (error2, stdout2) => {
-        if (error2) {
-          console.error(error2);
-          return sock.sendMessage(jid, { text: cajaError('Ocurrio un error al descargar los cambios. Puede que tengas archivos modificados localmente en conflicto.', { estilo: 'neon' }) });
-        }
-
-        sock.sendMessage(jid, { text: info('Instalando dependencias nuevas (si las hay)...', { titulo: 'UPDATE', estilo: 'neon' }) });
-
-        exec('npm install', { cwd: process.cwd() }, (error3) => {
-          if (error3) {
-            console.error(error3);
-            sock.sendMessage(jid, { text: cajaError('Se actualizo el codigo pero hubo un error instalando dependencias. Revisa la terminal.', { estilo: 'neon' }) });
-          }
-
-          sock.sendMessage(jid, {
-            text: exito('Bot actualizado correctamente. Reiniciando en 3 segundos...', { titulo: 'UPDATE COMPLETO', estilo: 'neon' })
-          }).then(() => {
-            setTimeout(() => {
-              process.exit(0);
-            }, 3000);
-          });
+      if (!cambiosLog.trim()) {
+        return sock.sendMessage(jid, {
+          text: exito('El bot ya esta en la ultima version, no hay nada nuevo que actualizar.', { titulo: 'UPDATE', estilo: 'neon' })
         });
+      }
+
+      await exec('git pull', { cwd: process.cwd() });
+
+      let avisoDependencias = '';
+      try {
+        await exec('npm install --legacy-peer-deps', { cwd: process.cwd() });
+      } catch (errNpm) {
+        console.error('[update] error npm install:', errNpm);
+        avisoDependencias = '\n⚠️ Hubo un error instalando dependencias, revisa la terminal.';
+      }
+
+      const texto = exito(
+        `Cambios aplicados:\n${cambiosLog.trim()}${avisoDependencias}\n\nReiniciando en 3 segundos...`,
+        { titulo: 'UPDATE COMPLETO', estilo: 'neon' }
+      );
+
+      await sock.sendMessage(jid, { text: texto });
+      setTimeout(() => process.exit(0), 3000);
+    } catch (err) {
+      console.error('[update]', err);
+      await sock.sendMessage(jid, {
+        text: cajaError('Ocurrio un error al actualizar. Verifica que el bot este conectado a un repositorio de git y que no haya archivos modificados en conflicto.', { estilo: 'neon' })
       });
-    });
+    }
   }
 };
