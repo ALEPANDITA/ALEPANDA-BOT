@@ -9,18 +9,25 @@ function extraerCodigoInvitacion(texto) {
 module.exports = {
   name: 'confesar',
   category: 'fun',
-  description: 'Envia una confesion anonima a un grupo usando su link de invitacion. Uso: .confesar <link> <confesion>',
+  description: 'Envia una confesion anonima a un grupo usando su link de invitacion. Uso: .confesar <link> <confesion> [numero para etiquetar]',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const contenido = texto.slice((prefix + 'confesar').length).trim();
     const codigo = extraerCodigoInvitacion(contenido);
 
     if (!codigo) {
       return sock.sendMessage(jid, {
-        text: advertencia(`Uso: ${prefix}confesar <link del grupo> <tu confesion>\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien`, { titulo: 'FALTA EL LINK', estilo: 'kawaii' })
+        text: advertencia(`Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347`, { titulo: 'FALTA EL LINK', estilo: 'kawaii' })
       });
     }
 
-    const confesion = contenido.replace(/https?:\/\/chat\.whatsapp\.com\/[a-zA-Z0-9]+/i, '').trim();
+    let confesion = contenido.replace(/https?:\/\/chat\.whatsapp\.com\/[a-zA-Z0-9]+/i, '').trim();
+
+    let numeroEtiquetado = null;
+    const matchNumero = confesion.match(/(\d{8,15})\s*$/);
+    if (matchNumero) {
+      numeroEtiquetado = matchNumero[1];
+      confesion = confesion.slice(0, matchNumero.index).trim();
+    }
 
     if (!confesion) {
       return sock.sendMessage(jid, {
@@ -40,19 +47,35 @@ module.exports = {
         });
       }
 
-      const textoConfesion = caja([
-        `"${confesion}"`
-      ], {
+      let jidEtiquetado = null;
+      if (numeroEtiquetado) {
+        const metadata = await sock.groupMetadata(grupoDestino);
+        const participante = metadata.participants.find(p => p.id.split('@')[0] === numeroEtiquetado);
+        if (participante) jidEtiquetado = participante.id;
+      }
+
+      const lineas = [`"${confesion}"`];
+      if (jidEtiquetado) {
+        lineas.push('', `👉 Va dedicada para @${numeroEtiquetado}`);
+      } else if (numeroEtiquetado) {
+        lineas.push('', `👉 (la persona etiquetada ya no esta en el grupo)`);
+      }
+
+      const textoConfesion = caja(lineas, {
         titulo: 'CONFESION ANONIMA',
         pie: 'Nadie sabe quien la mando... o si?',
         estilo: 'kawaii'
       });
 
-      await sock.sendMessage(grupoDestino, { text: textoConfesion });
+      await sock.sendMessage(grupoDestino, {
+        text: textoConfesion,
+        mentions: jidEtiquetado ? [jidEtiquetado] : []
+      });
 
       guardarConfesion({
         remitente: (msg.key.participant || msg.key.remoteJid).split('@')[0],
         confesion,
+        etiquetado: numeroEtiquetado || null,
         grupoId: grupoDestino,
         grupoNombre: infoInvitacion.subject,
         fecha: new Date().toISOString()
