@@ -91,7 +91,7 @@ module.exports = {
 
       for (const c of categorias[cat]) {
         const alias = c.aliases?.length ? ` _(${c.aliases.map(a => prefix + a).join(', ')})_` : '';
-        texto += `│ ▸ *${prefix}${c.name}*${alias}\n`;
+        texto += `│ 🪄 *${prefix}${c.name}*${alias}\n`;
         texto += `│   _${recortar(c.description || 'Sin descripcion')}_\n`;
       }
 
