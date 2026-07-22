@@ -1,4 +1,4 @@
-const { caja, advertencia, error: cajaError } = require('../../lib/estilo');
+const { caja, exito, advertencia, error: cajaError } = require('../../lib/estilo');
 const { guardarConfesion } = require('../../lib/confesiones');
 
 function extraerCodigoInvitacion(texto) {
@@ -16,7 +16,10 @@ module.exports = {
 
     if (!codigo) {
       return sock.sendMessage(jid, {
-        text: advertencia(`Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347`, { titulo: 'FALTA EL LINK', estilo: 'kawaii' })
+        text: advertencia(
+          `Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347`,
+          { titulo: 'FALTA EL LINK', estilo: 'kawaii' }
+        )
       });
     }
 
@@ -43,7 +46,7 @@ module.exports = {
 
       if (!gruposDelBot[grupoDestino]) {
         return sock.sendMessage(jid, {
-          text: cajaError('El bot no esta en ese grupo, no puedo enviar la confesion ahi.')
+          text: cajaError('El bot no esta en ese grupo, no puedo enviar la confesion ahi.', { estilo: 'kawaii' })
         });
       }
 
@@ -56,14 +59,14 @@ module.exports = {
 
       const lineas = [`"${confesion}"`];
       if (jidEtiquetado) {
-        lineas.push('', `👉 Va dedicada para @${numeroEtiquetado}`);
+        lineas.push('', `💌 Dedicada para @${numeroEtiquetado}`);
       } else if (numeroEtiquetado) {
-        lineas.push('', `👉 (la persona etiquetada ya no esta en el grupo)`);
+        lineas.push('', `⚠️ (la persona etiquetada ya no esta en el grupo)`);
       }
 
       const textoConfesion = caja(lineas, {
-        titulo: 'CONFESION ANONIMA',
-        pie: 'Nadie sabe quien la mando... o si?',
+        titulo: '💌 CONFESION ANONIMA 💌',
+        pie: 'Nadie sabe quien la mando... o si? 👀',
         estilo: 'kawaii'
       });
 
@@ -83,13 +86,13 @@ module.exports = {
 
       if (jid !== grupoDestino) {
         await sock.sendMessage(jid, {
-          text: `✅ Tu confesion fue enviada de forma anonima a *${infoInvitacion.subject}*`
+          text: exito(`Tu confesion fue enviada de forma anonima a *${infoInvitacion.subject}*`, { titulo: 'ENVIADA', estilo: 'kawaii' })
         });
       }
     } catch (err) {
       console.error('[confesar]', err);
       await sock.sendMessage(jid, {
-        text: cajaError('No se pudo enviar la confesion. Revisa que el link sea valido y que el bot este en ese grupo.')
+        text: cajaError('No se pudo enviar la confesion. Revisa que el link sea valido y que el bot este en ese grupo.', { estilo: 'kawaii' })
       });
     }
   }
