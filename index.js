@@ -496,6 +496,18 @@ async function startBot() {
           return;
         }
       }
+
+      // Simon vigila la conversacion del grupo y puede intervenir por su cuenta
+      // si detecta que la cosa se esta poniendo pesada, sin que nadie lo llame.
+      if (texto) {
+        const { registrarMensaje, evaluarIntervencionSimon } = require('./lib/simonWatcher');
+        const nombreParaSimon = msg.pushName || remitente.split('@')[0];
+        registrarMensaje(jid, nombreParaSimon, texto);
+        // Fire-and-forget: no bloquea el resto del manejo del mensaje (comandos, etc.)
+        evaluarIntervencionSimon(sock, jid).catch(err => {
+          console.error('Fallo el watcher de Simon:', err);
+        });
+      }
     }
 
     const { obtenerJuego, terminarJuego } = require('./lib/juegos');

@@ -12,7 +12,7 @@ const {
   claveDe,
   generarRespuesta,
   quiereInvitarSimi,
-  quiereInvitarSimon,
+  quiereInvitarPanda,
   resolverEtiquetasTags,
   armarMensajeParaIA,
   armarTextoFinal,
@@ -20,23 +20,23 @@ const {
 } = require('../../lib/iaAmigos');
 
 module.exports = {
-  name: 'panda',
+  name: 'simon',
   category: 'ia',
-  description: 'Habla con Panda, una IA buena onda y respetuosa. Soporta @mencion, @all/@todos y puede traer a Simi a la conversacion',
+  description: 'Habla con Simon, una IA tranquila y calmada (pero seria si la hacen enojar). Soporta @mencion, @all/@todos y puede traer a Simi o a Panda a la conversacion',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const remitente = msg.key.participant || msg.key.remoteJid;
     const clave = claveDe(jid, remitente);
 
-    let mensaje = texto.slice((prefix + 'panda').length).trim();
+    let mensaje = texto.slice((prefix + 'simon').length).trim();
 
     if (mensaje.toLowerCase() === 'reset' || mensaje.toLowerCase() === 'reiniciar') {
-      historialesPanda.set(clave, []);
+      historialesSimon.set(clave, []);
       return sock.sendMessage(jid, { text: 'Listo, borre nuestra conversacion, empezamos de cero.' }, { quoted: msg });
     }
 
     if (!mensaje) {
       return sock.sendMessage(jid, {
-        text: `Uso: ${prefix}panda <mensaje>\nEjemplo: ${prefix}panda que onda\nTambien puedes: ${prefix}panda @persona <mensaje> o ${prefix}panda @all <mensaje>\nY puedes decirle "trae a simi" o "trae a simon" en tu mensaje para que tambien opinen\n\n${prefix}panda reset para borrar tu conversacion\n\n(Cada persona tiene su propia conversacion con Panda, y se olvida de todo despues de ${HORAS_EXPIRACION} horas sin hablarle)`
+        text: `Uso: ${prefix}simon <mensaje>\nEjemplo: ${prefix}simon que onda\nTambien puedes: ${prefix}simon @persona <mensaje> o ${prefix}simon @all <mensaje>\nY puedes decirle "trae a simi" o "trae a panda" en tu mensaje para que tambien opinen\n\n${prefix}simon reset para borrar tu conversacion\n\n(Cada persona tiene su propia conversacion con Simón, y se olvida de todo despues de ${HORAS_EXPIRACION} horas sin hablarle)`
       }, { quoted: msg });
     }
 
@@ -63,12 +63,12 @@ module.exports = {
     }
 
     try {
-      await sock.sendMessage(jid, { react: { text: '🐼', key: msg.key } });
+      await sock.sendMessage(jid, { react: { text: '🧘', key: msg.key } });
 
       const etiquetasTags = esTodos ? [] : await resolverEtiquetasTags(sock, jid, mencionados, esGrupo);
       const mensajeParaIA = armarMensajeParaIA(mensaje, { esTodos, etiquetasTags });
 
-      const respuesta = await generarRespuesta(SYSTEM_PROMPT_PANDA, historialesPanda, clave, mensajeParaIA, mensaje);
+      const respuesta = await generarRespuesta(SYSTEM_PROMPT_SIMON, historialesSimon, clave, mensajeParaIA, mensaje);
       const textoFinal = armarTextoFinal(respuesta, { esTodos, etiquetasTags });
 
       await sock.sendMessage(jid, { text: textoFinal, mentions: mencionados }, { quoted: msg });
@@ -78,13 +78,13 @@ module.exports = {
       if (quiereInvitarSimi(mensajeOriginal)) {
         try {
           const mensajeParaSimi = armarMensajeParaInvitado({
-            nombreAnfitrion: NOMBRE_PANDA,
+            nombreAnfitrion: NOMBRE_SIMON,
             mensajeUsuario: mensaje,
             respuestaAnfitrion: respuesta
           });
           const respuestaSimi = await generarRespuesta(SYSTEM_PROMPT_SIMI, historialesSimi, clave, mensajeParaSimi, mensaje);
           const textoFinalSimi = armarTextoFinal(respuestaSimi, { esTodos, etiquetasTags });
-          await sock.sendMessage(jid, { text: `😈 *Simi:* ${textoFinalSimi}`, mentions: mencionados }, { quoted: msg });
+          await sock.sendMessage(jid, { text: `😈 *${NOMBRE_SIMI}:* ${textoFinalSimi}`, mentions: mencionados }, { quoted: msg });
         } catch (err) {
           console.error('No se pudo traer a Simi a la conversacion:', err);
           const motivo = err.code === 'NO_API_KEY'
@@ -94,23 +94,23 @@ module.exports = {
         }
       }
 
-      // Si en el mensaje original piden traer a Simon, lo metemos a la conversacion
-      if (quiereInvitarSimon(mensajeOriginal)) {
+      // Si en el mensaje original piden traer a Panda, lo metemos a la conversacion
+      if (quiereInvitarPanda(mensajeOriginal)) {
         try {
-          const mensajeParaSimon = armarMensajeParaInvitado({
-            nombreAnfitrion: NOMBRE_PANDA,
+          const mensajeParaPanda = armarMensajeParaInvitado({
+            nombreAnfitrion: NOMBRE_SIMON,
             mensajeUsuario: mensaje,
             respuestaAnfitrion: respuesta
           });
-          const respuestaSimon = await generarRespuesta(SYSTEM_PROMPT_SIMON, historialesSimon, clave, mensajeParaSimon, mensaje);
-          const textoFinalSimon = armarTextoFinal(respuestaSimon, { esTodos, etiquetasTags });
-          await sock.sendMessage(jid, { text: `🧘 *${NOMBRE_SIMON}:* ${textoFinalSimon}`, mentions: mencionados }, { quoted: msg });
+          const respuestaPanda = await generarRespuesta(SYSTEM_PROMPT_PANDA, historialesPanda, clave, mensajeParaPanda, mensaje);
+          const textoFinalPanda = armarTextoFinal(respuestaPanda, { esTodos, etiquetasTags });
+          await sock.sendMessage(jid, { text: `🐼 *${NOMBRE_PANDA}:* ${textoFinalPanda}`, mentions: mencionados }, { quoted: msg });
         } catch (err) {
-          console.error('No se pudo traer a Simon a la conversacion:', err);
+          console.error('No se pudo traer a Panda a la conversacion:', err);
           const motivo = err.code === 'NO_API_KEY'
             ? 'no hay API key de Gemini configurada'
             : err.message || 'error desconocido';
-          await sock.sendMessage(jid, { text: `⚠️ Intente traer a Simón pero fallo (${motivo})` }, { quoted: msg });
+          await sock.sendMessage(jid, { text: `⚠️ Intente traer a Panda pero fallo (${motivo})` }, { quoted: msg });
         }
       }
     } catch (err) {

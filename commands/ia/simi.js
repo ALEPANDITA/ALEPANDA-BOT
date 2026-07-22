@@ -1,14 +1,18 @@
 const {
   NOMBRE_SIMI,
   NOMBRE_PANDA,
+  NOMBRE_SIMON,
   SYSTEM_PROMPT_SIMI,
   SYSTEM_PROMPT_PANDA,
+  SYSTEM_PROMPT_SIMON,
   historialesSimi,
   historialesPanda,
+  historialesSimon,
   HORAS_EXPIRACION,
   claveDe,
   generarRespuesta,
   quiereInvitarPanda,
+  quiereInvitarSimon,
   resolverEtiquetasTags,
   armarMensajeParaIA,
   armarTextoFinal,
@@ -32,7 +36,7 @@ module.exports = {
 
     if (!mensaje) {
       return sock.sendMessage(jid, {
-        text: `Uso: ${prefix}simi <mensaje>\nEjemplo: ${prefix}simi que onda\nTambien puedes: ${prefix}simi @persona <mensaje> o ${prefix}simi @all <mensaje>\nY puedes decirle "trae a panda" en tu mensaje para que Panda tambien opine\n\n${prefix}simi reset para borrar tu conversacion\n\n(Cada persona tiene su propia conversacion con Simi, y se olvida de todo despues de ${HORAS_EXPIRACION} horas sin hablarle)`
+        text: `Uso: ${prefix}simi <mensaje>\nEjemplo: ${prefix}simi que onda\nTambien puedes: ${prefix}simi @persona <mensaje> o ${prefix}simi @all <mensaje>\nY puedes decirle "trae a panda" o "trae a simon" en tu mensaje para que tambien opinen\n\n${prefix}simi reset para borrar tu conversacion\n\n(Cada persona tiene su propia conversacion con Simi, y se olvida de todo despues de ${HORAS_EXPIRACION} horas sin hablarle)`
       }, { quoted: msg });
     }
 
@@ -87,6 +91,26 @@ module.exports = {
             ? 'no hay API key de Gemini configurada'
             : err.message || 'error desconocido';
           await sock.sendMessage(jid, { text: `⚠️ Intente traer a Panda pero fallo (${motivo})` }, { quoted: msg });
+        }
+      }
+
+      // Si en el mensaje original piden traer a Simon, lo metemos a la conversacion
+      if (quiereInvitarSimon(mensajeOriginal)) {
+        try {
+          const mensajeParaSimon = armarMensajeParaInvitado({
+            nombreAnfitrion: NOMBRE_SIMI,
+            mensajeUsuario: mensaje,
+            respuestaAnfitrion: respuesta
+          });
+          const respuestaSimon = await generarRespuesta(SYSTEM_PROMPT_SIMON, historialesSimon, clave, mensajeParaSimon, mensaje);
+          const textoFinalSimon = armarTextoFinal(respuestaSimon, { esTodos, etiquetasTags });
+          await sock.sendMessage(jid, { text: `🧘 *${NOMBRE_SIMON}:* ${textoFinalSimon}`, mentions: mencionados }, { quoted: msg });
+        } catch (err) {
+          console.error('No se pudo traer a Simon a la conversacion:', err);
+          const motivo = err.code === 'NO_API_KEY'
+            ? 'no hay API key de Gemini configurada'
+            : err.message || 'error desconocido';
+          await sock.sendMessage(jid, { text: `⚠️ Intente traer a Simón pero fallo (${motivo})` }, { quoted: msg });
         }
       }
     } catch (err) {
