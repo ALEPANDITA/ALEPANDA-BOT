@@ -83,6 +83,10 @@ module.exports = {
           await sock.sendMessage(jid, { text: `😈 *Simi:* ${textoFinalSimi}`, mentions: mencionados }, { quoted: msg });
         } catch (err) {
           console.error('No se pudo traer a Simi a la conversacion:', err);
+          const motivo = err.code === 'NO_API_KEY'
+            ? 'no hay API key de Gemini configurada'
+            : err.message || 'error desconocido';
+          await sock.sendMessage(jid, { text: `⚠️ Intente traer a Simi pero fallo (${motivo})` }, { quoted: msg });
         }
       }
     } catch (err) {

@@ -83,6 +83,10 @@ module.exports = {
           await sock.sendMessage(jid, { text: `🐼 *Panda:* ${textoFinalPanda}`, mentions: mencionados }, { quoted: msg });
         } catch (err) {
           console.error('No se pudo traer a Panda a la conversacion:', err);
+          const motivo = err.code === 'NO_API_KEY'
+            ? 'no hay API key de Gemini configurada'
+            : err.message || 'error desconocido';
+          await sock.sendMessage(jid, { text: `⚠️ Intente traer a Panda pero fallo (${motivo})` }, { quoted: msg });
         }
       }
     } catch (err) {
