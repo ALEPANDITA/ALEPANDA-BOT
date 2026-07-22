@@ -7,17 +7,21 @@ function extraerCodigoInvitacion(texto) {
   return match ? match[1] : null;
 }
 
-function extraerMensajeConImagen(msg) {
+function extraerMensajeConMedia(msg) {
   const citado = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  if (citado?.imageMessage) return { message: citado };
-  if (msg.message?.imageMessage) return msg;
+
+  if (citado?.imageMessage) return { message: citado, tipo: 'imagen' };
+  if (citado?.videoMessage) return { message: citado, tipo: 'video' };
+  if (msg.message?.imageMessage) return { message: msg, tipo: 'imagen' };
+  if (msg.message?.videoMessage) return { message: msg, tipo: 'video' };
+
   return null;
 }
 
 module.exports = {
   name: 'confesar',
   category: 'fun',
-  description: 'Envia una confesion anonima a un grupo usando su link de invitacion. Puedes adjuntar o responder una imagen. Uso: .confesar <link> <confesion> [numero para etiquetar]',
+  description: 'Envia una confesion anonima a un grupo usando su link de invitacion. Puedes adjuntar o responder una imagen o video. Uso: .confesar <link> <confesion> [numero para etiquetar]',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const contenido = texto.slice((prefix + 'confesar').length).trim();
     const codigo = extraerCodigoInvitacion(contenido);
@@ -25,7 +29,7 @@ module.exports = {
     if (!codigo) {
       return sock.sendMessage(jid, {
         text: advertencia(
-          `Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347\n\nTambien puedes responder a una imagen (o mandarla junto al comando) para incluirla.`,
+          `Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347\n\nTambien puedes responder a una imagen o video (o mandarlo junto al comando) para incluirlo.`,
           { titulo: 'FALTA EL LINK', estilo: 'kawaii' }
         )
       });
@@ -46,11 +50,11 @@ module.exports = {
       confesion = confesion.replace(/@todos\b/gi, '').replace(/\s{2,}/g, ' ').trim();
     }
 
-    const mensajeConImagen = extraerMensajeConImagen(msg);
+    const mensajeConMedia = extraerMensajeConMedia(msg);
 
-    if (!confesion && !mensajeConImagen) {
+    if (!confesion && !mensajeConMedia) {
       return sock.sendMessage(jid, {
-        text: advertencia('Escribe tu confesion despues del link (o adjunta una imagen).', { titulo: 'FALTA LA CONFESION', estilo: 'kawaii' })
+        text: advertencia('Escribe tu confesion despues del link (o adjunta una imagen/video).', { titulo: 'FALTA LA CONFESION', estilo: 'kawaii' })
       });
     }
 
@@ -91,10 +95,11 @@ module.exports = {
         ? metadata.participants.map(p => p.id)
         : (jidEtiquetado ? [jidEtiquetado] : []);
 
-      if (mensajeConImagen) {
-        const buffer = await downloadMediaMessage(mensajeConImagen, 'buffer', {});
+      if (mensajeConMedia) {
+        const buffer = await downloadMediaMessage(mensajeConMedia.message, 'buffer', {});
+        const campoMedia = mensajeConMedia.tipo === 'video' ? 'video' : 'image';
         await sock.sendMessage(grupoDestino, {
-          image: buffer,
+          [campoMedia]: buffer,
           caption: textoConfesion,
           mentions
         });
@@ -109,7 +114,7 @@ module.exports = {
         remitente: (msg.key.participant || msg.key.remoteJid).split('@')[0],
         confesion,
         etiquetado: numeroEtiquetado || null,
-        conImagen: Boolean(mensajeConImagen),
+        conMedia: mensajeConMedia ? mensajeConMedia.tipo : null,
         aTodos: todos,
         grupoId: grupoDestino,
         grupoNombre: infoInvitacion.subject,
