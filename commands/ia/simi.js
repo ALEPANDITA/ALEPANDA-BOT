@@ -64,8 +64,9 @@ module.exports = {
     // Detectar @all / @todos como texto literal -> mencionar a todo el grupo
     const pideTodos = /(^|\s)@(all|todos)(\s|$)/i.test(mensaje);
     const esGrupo = jid.endsWith('@g.us');
+    const esTodos = pideTodos && esGrupo;
 
-    if (pideTodos && esGrupo) {
+    if (esTodos) {
       try {
         const metadata = await sock.groupMetadata(jid);
         mencionados = metadata.participants
@@ -83,22 +84,11 @@ module.exports = {
       const historial = obtenerHistorial(clave);
       const historialParaAPI = historial.map(h => ({ role: h.role, text: h.text }));
 
-      let mensajeParaIA = mensaje;
-      if (mencionados.length === 1) {
-        mensajeParaIA = `(Estas hablando directamente con una persona que fue etiquetada en el chat, dirigete a ella como "tu") ${mensaje}`;
-      } else if (mencionados.length > 1) {
-        mensajeParaIA = `(Estas hablando directamente con ${mencionados.length} personas que fueron etiquetadas en el chat, dirigete a ellas como "ustedes") ${mensaje}`;
-      }
-
-      const respuesta = await chatConPersonalidad(SYSTEM_PROMPT, historialParaAPI, mensajeParaIA);
-
-      const ahora = Date.now();
-      historial.push({ role: 'user', text: mensaje, timestamp: ahora });
-      historial.push({ role: 'model', text: respuesta, timestamp: ahora });
-      while (historial.length > MAX_MENSAJES) historial.shift();
-
-      let etiquetas = '';
-      if (mencionados.length) {
+      // Resolvemos los numeros reales ANTES de llamar a la IA, para poder pedirle
+      // que incluya la etiqueta dentro del texto de forma natural (no pegada aparte).
+      // Esto solo aplica para menciones puntuales (@persona), NO para @todos.
+      let etiquetasTags = [];
+      if (mencionados.length && !esTodos) {
         let numerosVisibles = mencionados.map(id => id.split('@')[0]);
 
         if (esGrupo) {
@@ -117,9 +107,38 @@ module.exports = {
           }
         }
 
-        etiquetas = numerosVisibles.map(n => `@${n}`).join(' ');
+        etiquetasTags = numerosVisibles.map(n => `@${n}`);
       }
-      const textoFinal = etiquetas ? `${etiquetas}\n${respuesta}` : respuesta;
+
+      let mensajeParaIA = mensaje;
+      if (esTodos) {
+        mensajeParaIA = `(Le estas hablando a todo el grupo, dirigete a ellos como "ustedes" o "todos") ${mensaje}`;
+      } else if (etiquetasTags.length === 1) {
+        mensajeParaIA = `(Estas hablando directamente con una persona que fue etiquetada en el chat. Dirigete a ella como "tu", e incluye en algun punto natural de tu respuesta, una sola vez, exactamente este texto tal cual: ${etiquetasTags[0]} -- por ejemplo "oye ${etiquetasTags[0]}, ..." o al final de una frase, lo que suene mas natural. No lo pongas entre comillas ni lo expliques, solo insertalo como si etiquetaras a alguien en un chat de WhatsApp) ${mensaje}`;
+      } else if (etiquetasTags.length > 1) {
+        mensajeParaIA = `(Estas hablando directamente con ${etiquetasTags.length} personas que fueron etiquetadas en el chat. Dirigete a ellas como "ustedes", e incluye en algun punto natural de tu respuesta, una sola vez cada una, exactamente estos textos tal cual: ${etiquetasTags.join(' ')} -- como si etiquetaras a alguien en un chat de WhatsApp, no los pongas entre comillas ni los expliques) ${mensaje}`;
+      }
+
+      const respuesta = await chatConPersonalidad(SYSTEM_PROMPT, historialParaAPI, mensajeParaIA);
+
+      const ahora = Date.now();
+      historial.push({ role: 'user', text: mensaje, timestamp: ahora });
+      historial.push({ role: 'model', text: respuesta, timestamp: ahora });
+      while (historial.length > MAX_MENSAJES) historial.shift();
+
+      let textoFinal = respuesta;
+      if (esTodos) {
+        // Para @todos solo mostramos la palabra "@todos", nunca cada numero individual.
+        // La notificacion a todo el grupo sigue funcionando por el array "mentions".
+        textoFinal = `${textoFinal} @todos`;
+      } else {
+        // Red de seguridad: si la IA se olvido de alguna etiqueta puntual, la agregamos al final
+        // para que la mencion siempre funcione, aunque lo ideal es que ya venga en el texto.
+        const faltantes = etiquetasTags.filter(tag => !textoFinal.includes(tag));
+        if (faltantes.length) {
+          textoFinal = `${textoFinal} ${faltantes.join(' ')}`;
+        }
+      }
 
       await sock.sendMessage(jid, { text: textoFinal, mentions: mencionados }, { quoted: msg });
       await sock.sendMessage(jid, { react: { text: '✅', key: msg.key } });
