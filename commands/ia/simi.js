@@ -16,7 +16,8 @@ const {
   resolverEtiquetasTags,
   armarMensajeParaIA,
   armarTextoFinal,
-  armarMensajeParaInvitado
+  armarMensajeParaInvitado,
+  armarMensajeParaRespuestaDirecta
 } = require('../../lib/iaAmigos');
 
 module.exports = {
@@ -105,6 +106,22 @@ module.exports = {
           const respuestaSimon = await generarRespuesta(SYSTEM_PROMPT_SIMON, historialesSimon, clave, mensajeParaSimon, mensaje);
           const textoFinalSimon = armarTextoFinal(respuestaSimon, { esTodos, etiquetasTags });
           await sock.sendMessage(jid, { text: `🧘 *${NOMBRE_SIMON}:* ${textoFinalSimon}`, mentions: mencionados }, { quoted: msg });
+
+          // Simi no se queda callado: le responde de vuelta a Simon (con su sarcasmo
+          // de siempre, pero con la cautela/nervios que le tiene).
+          try {
+            const mensajeDeVuelta = armarMensajeParaRespuestaDirecta({
+              nombreOtroBot: NOMBRE_SIMON,
+              mensajeUsuario: mensaje,
+              respuestaOtroBot: respuestaSimon
+            });
+            const respuestaSimiDeVuelta = await generarRespuesta(SYSTEM_PROMPT_SIMI, historialesSimi, clave, mensajeDeVuelta, mensaje);
+            const textoFinalSimiDeVuelta = armarTextoFinal(respuestaSimiDeVuelta, { esTodos, etiquetasTags });
+            await sock.sendMessage(jid, { text: `😈 *Simi:* ${textoFinalSimiDeVuelta}`, mentions: mencionados }, { quoted: msg });
+          } catch (err) {
+            // Si esto falla no mandamos otro mensaje de error, ya se mostro el de Simon arriba.
+            console.error('No se pudo generar la respuesta de vuelta de Simi hacia Simon:', err);
+          }
         } catch (err) {
           console.error('No se pudo traer a Simon a la conversacion:', err);
           const motivo = err.code === 'NO_API_KEY'
