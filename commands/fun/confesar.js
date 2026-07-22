@@ -31,7 +31,7 @@ module.exports = {
       });
     }
 
-    let confesion = contenido.replace(/https?:\/\/chat\.whatsapp\.com\/[a-zA-Z0-9]+/i, '').trim();
+    let confesion = contenido.replace(/https?:\/\/chat\.whatsapp\.com\/[a-zA-Z0-9]+(\?\S*)?/i, '').trim();
 
     let numeroEtiquetado = null;
     const matchNumero = confesion.match(/(\d{8,15})\s*$/);
