@@ -1,3 +1,4 @@
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { caja, exito, advertencia, error: cajaError } = require('../../lib/estilo');
 const { guardarConfesion } = require('../../lib/confesiones');
 
@@ -6,10 +7,17 @@ function extraerCodigoInvitacion(texto) {
   return match ? match[1] : null;
 }
 
+function extraerMensajeConImagen(msg) {
+  const citado = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+  if (citado?.imageMessage) return { message: citado };
+  if (msg.message?.imageMessage) return msg;
+  return null;
+}
+
 module.exports = {
   name: 'confesar',
   category: 'fun',
-  description: 'Envia una confesion anonima a un grupo usando su link de invitacion. Uso: .confesar <link> <confesion> [numero para etiquetar]',
+  description: 'Envia una confesion anonima a un grupo usando su link de invitacion. Puedes adjuntar o responder una imagen. Uso: .confesar <link> <confesion> [numero para etiquetar]',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const contenido = texto.slice((prefix + 'confesar').length).trim();
     const codigo = extraerCodigoInvitacion(contenido);
@@ -17,7 +25,7 @@ module.exports = {
     if (!codigo) {
       return sock.sendMessage(jid, {
         text: advertencia(
-          `Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347`,
+          `Uso: ${prefix}confesar <link del grupo> <tu confesion> [numero]\nEjemplo: ${prefix}confesar https://chat.whatsapp.com/ABC123 me gusta alguien 525662708347\n\nTambien puedes responder a una imagen (o mandarla junto al comando) para incluirla.`,
           { titulo: 'FALTA EL LINK', estilo: 'kawaii' }
         )
       });
@@ -32,9 +40,17 @@ module.exports = {
       confesion = confesion.slice(0, matchNumero.index).trim();
     }
 
-    if (!confesion) {
+    let todos = false;
+    if (/@todos\b/i.test(confesion)) {
+      todos = true;
+      confesion = confesion.replace(/@todos\b/gi, '').replace(/\s{2,}/g, ' ').trim();
+    }
+
+    const mensajeConImagen = extraerMensajeConImagen(msg);
+
+    if (!confesion && !mensajeConImagen) {
       return sock.sendMessage(jid, {
-        text: advertencia('Escribe tu confesion despues del link.', { titulo: 'FALTA LA CONFESION', estilo: 'kawaii' })
+        text: advertencia('Escribe tu confesion despues del link (o adjunta una imagen).', { titulo: 'FALTA LA CONFESION', estilo: 'kawaii' })
       });
     }
 
@@ -50,14 +66,15 @@ module.exports = {
         });
       }
 
+      const metadata = await sock.groupMetadata(grupoDestino);
+
       let jidEtiquetado = null;
       if (numeroEtiquetado) {
-        const metadata = await sock.groupMetadata(grupoDestino);
         const participante = metadata.participants.find(p => p.id.split('@')[0] === numeroEtiquetado);
         if (participante) jidEtiquetado = participante.id;
       }
 
-      const lineas = [`"${confesion}"`];
+      const lineas = confesion ? [`"${confesion}"`] : [];
       if (jidEtiquetado) {
         lineas.push('', `💌 Dedicada para @${numeroEtiquetado}`);
       } else if (numeroEtiquetado) {
@@ -70,15 +87,30 @@ module.exports = {
         estilo: 'kawaii'
       });
 
-      await sock.sendMessage(grupoDestino, {
-        text: textoConfesion,
-        mentions: jidEtiquetado ? [jidEtiquetado] : []
-      });
+      const mentions = todos
+        ? metadata.participants.map(p => p.id)
+        : (jidEtiquetado ? [jidEtiquetado] : []);
+
+      if (mensajeConImagen) {
+        const buffer = await downloadMediaMessage(mensajeConImagen, 'buffer', {});
+        await sock.sendMessage(grupoDestino, {
+          image: buffer,
+          caption: textoConfesion,
+          mentions
+        });
+      } else {
+        await sock.sendMessage(grupoDestino, {
+          text: textoConfesion,
+          mentions
+        });
+      }
 
       guardarConfesion({
         remitente: (msg.key.participant || msg.key.remoteJid).split('@')[0],
         confesion,
         etiquetado: numeroEtiquetado || null,
+        conImagen: Boolean(mensajeConImagen),
+        aTodos: todos,
         grupoId: grupoDestino,
         grupoNombre: infoInvitacion.subject,
         fecha: new Date().toISOString()
