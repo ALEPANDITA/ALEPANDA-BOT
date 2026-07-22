@@ -288,7 +288,13 @@ async function startBot() {
     const config = leerConfig();
 
     const jid = msg.key.remoteJid;
-    const texto = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
+    const texto = (
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      msg.message.imageMessage?.caption ||
+      msg.message.videoMessage?.caption ||
+      ''
+    ).trim();
     const esGrupo = jid.endsWith('@g.us');
 
     if (texto) {
