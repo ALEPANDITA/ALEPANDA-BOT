@@ -3,7 +3,7 @@ const { leerKeys } = require('../../lib/apikeys');
 const { esOwnerBot } = require('../../lib/permisos');
 
 // Servicios que necesitan SU PROPIA clave guardada para funcionar (o mejorar) de verdad
-const SERVICIOS_PROPIOS = ['gemini', 'dvyer'];
+const SERVICIOS_PROPIOS = ['gemini', 'groq', 'dvyer'];
 
 // Estos comandos de descarga en realidad usan la clave de "dvyer" por dentro,
 // asi que estan activos si dvyer tiene al menos una clave guardada
