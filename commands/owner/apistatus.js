@@ -5,6 +5,11 @@ const { esOwnerBot } = require('../../lib/permisos');
 // Lista de servicios que el bot sabe usar (para mostrarlos aunque no tengan key guardada)
 const SERVICIOS_CONOCIDOS = ['gemini', 'groq', 'openrouter', 'tiktok', 'mediafire', 'pinterest', 'facebook', 'instagram', 'ytmp3', 'ytmp4'];
 
+function enmascarar(clave) {
+  if (typeof clave !== 'string' || !clave.trim()) return '';
+  return `${clave.slice(0, 4)}${'*'.repeat(Math.max(clave.length - 4, 0))}`;
+}
+
 module.exports = {
   name: 'apistatus',
   category: 'owner',
@@ -23,14 +28,26 @@ module.exports = {
     let texto = `🔑 *ESTADO DE LAS APIs*\n\n`;
 
     for (const servicio of todosLosServicios) {
-      const clave = keys[servicio];
-      const activa = clave && clave.trim().length > 0;
+      const claves = Array.isArray(keys[servicio]) ? keys[servicio] : [];
+      const activa = claves.length > 0;
       const estado = activa ? '🟢 Activa' : '🔴 Inactiva';
-      const vista = activa ? `(${clave.slice(0, 4)}${'*'.repeat(Math.max(clave.length - 4, 0))})` : '';
-      texto += `▸ ${servicio}: ${estado} ${vista}\n`;
+
+      if (!activa) {
+        texto += `▸ ${servicio}: ${estado}\n`;
+        continue;
+      }
+
+      if (claves.length === 1) {
+        texto += `▸ ${servicio}: ${estado} (${enmascarar(claves[0])})\n`;
+      } else {
+        texto += `▸ ${servicio}: ${estado} — *${claves.length} claves*\n`;
+        claves.forEach((c, i) => {
+          texto += `    ${i + 1}. ${enmascarar(c)}\n`;
+        });
+      }
     }
 
-    texto += `\nUsa \`.setapikey <servicio> <clave>\` para activar una.`;
+    texto += `\nUsa \`.setapikey <servicio> <clave>\` para agregar una.\nUsa \`.delapikey <servicio> <numero>\` para quitar una.`;
 
     await sock.sendMessage(jid, { text: texto });
   }
