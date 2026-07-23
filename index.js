@@ -499,7 +499,8 @@ async function startBot() {
 
       // Simon vigila la conversacion del grupo y puede intervenir por su cuenta
       // si detecta que la cosa se esta poniendo pesada, sin que nadie lo llame.
-      if (texto) {
+      // (Esto se puede apagar por grupo con .simonauto, sin afectar los comandos .simon/.simi/etc.)
+      if (texto && grupo.simonAutomatico) {
         const { registrarMensaje, evaluarIntervencionSimon } = require('./lib/simonWatcher');
         const nombreParaSimon = msg.pushName || remitente.split('@')[0];
         registrarMensaje(jid, nombreParaSimon, texto);
