@@ -1,5 +1,6 @@
 const { leerDB, guardarDB, getGrupo, listaVozUnica } = require('../../lib/db');
-const { esAdminDelGrupo, esAdminDelBot } = require('../../lib/permisos');
+const { leerConfig } = require('../../lib/config');
+const { esOwnerBot, esAdminDelBot } = require('../../lib/permisos');
 const { exito, advertencia } = require('../../lib/estilo');
 
 function extraerObjetivo(msg) {
@@ -11,15 +12,15 @@ function extraerObjetivo(msg) {
 module.exports = {
   name: 'vozunica',
   category: 'admin',
-  description: 'Deja que SOLO ciertas personas puedan hablar en el grupo (al resto se les borra el mensaje), sin quitarle el admin a nadie. Uso: .vozunica @persona | .vozunica quitar @persona | .vozunica off',
+  description: 'Deja que SOLO ciertas personas puedan hablar en el grupo (al resto se les borra el mensaje), sin quitarle el admin a nadie. Uso: .vozunica @persona | .vozunica quitar @persona | .vozunica off (solo owners del bot)',
   groupOnly: true,
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const remitente = msg.key.participant || msg.key.remoteJid;
-    const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
+    const config = leerConfig();
+    const esOwner = await esOwnerBot(sock, config, msg);
     const esAdminBot = await esAdminDelBot(sock, jid);
 
-    if (!esAdmin) {
-      return sock.sendMessage(jid, { text: advertencia('Solo un admin puede usar este comando.', { titulo: 'SIN PERMISOS' }) });
+    if (!esOwner) {
+      return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS' }) });
     }
     if (!esAdminBot) {
       return sock.sendMessage(jid, { text: advertencia('Necesito ser admin del grupo para poder borrar mensajes.', { titulo: 'ME FALTAN PERMISOS' }) });
@@ -32,7 +33,6 @@ module.exports = {
     const subcomando = (argumento.split(/\s+/)[0] || '').toLowerCase();
     const objetivo = extraerObjetivo(msg);
 
-    // Sin argumentos de texto Y sin responder a nadie: mostrar el estado actual
     if (!argumento && !objetivo) {
       if (permitidos.length) {
         return sock.sendMessage(jid, {
@@ -45,14 +45,12 @@ module.exports = {
       });
     }
 
-    // Apagarlo por completo
     if (subcomando === 'off') {
       grupo.vozUnica = [];
       guardarDB(db);
       return sock.sendMessage(jid, { text: exito('Voz unica desactivada. Todos pueden hablar de nuevo.', { titulo: 'VOZ UNICA' }) });
     }
 
-    // Quitar a una persona especifica de la lista
     if (subcomando === 'quitar') {
       if (!objetivo) {
         return sock.sendMessage(jid, { text: advertencia(`Menciona a quien quitar.\nEjemplo: ${prefix}vozunica quitar @persona`, { titulo: 'FALTA LA PERSONA' }) });
@@ -70,8 +68,6 @@ module.exports = {
       return sock.sendMessage(jid, { text: exito('Ya no queda nadie en la lista, asi que voz unica se apago por completo. Todos pueden hablar de nuevo.', { titulo: 'VOZ UNICA' }) });
     }
 
-    // Cualquier otro caso: agregar a la persona mencionada/citada a la lista
-    // (esto cubre tanto ".vozunica @persona" como responder un mensaje sin escribir nada mas)
     if (!objetivo) {
       return sock.sendMessage(jid, { text: advertencia(`Menciona a la persona o responde su mensaje.\nEjemplo: ${prefix}vozunica @persona`, { titulo: 'FALTA LA PERSONA' }) });
     }
