@@ -29,9 +29,11 @@ module.exports = {
     const grupo = getGrupo(db, jid);
     const permitidos = listaVozUnica(grupo);
     const argumento = texto.slice((prefix + 'vozunica').length).trim();
-    const [subcomando, ...resto] = argumento.split(/\s+/);
+    const subcomando = (argumento.split(/\s+/)[0] || '').toLowerCase();
+    const objetivo = extraerObjetivo(msg);
 
-    if (!argumento) {
+    // Sin argumentos de texto Y sin responder a nadie: mostrar el estado actual
+    if (!argumento && !objetivo) {
       if (permitidos.length) {
         return sock.sendMessage(jid, {
           text: exito(`Voz unica activada.\nPueden hablar:\n${permitidos.map(n => `- @${n}`).join('\n')}\n\nAgregar otra: ${prefix}vozunica @persona\nQuitar a alguien: ${prefix}vozunica quitar @persona\nApagarlo: ${prefix}vozunica off`, { titulo: 'VOZ UNICA' }),
@@ -43,14 +45,15 @@ module.exports = {
       });
     }
 
-    if (subcomando.toLowerCase() === 'off') {
+    // Apagarlo por completo
+    if (subcomando === 'off') {
       grupo.vozUnica = [];
       guardarDB(db);
       return sock.sendMessage(jid, { text: exito('Voz unica desactivada. Todos pueden hablar de nuevo.', { titulo: 'VOZ UNICA' }) });
     }
 
-    if (subcomando.toLowerCase() === 'quitar') {
-      const objetivo = extraerObjetivo(msg);
+    // Quitar a una persona especifica de la lista
+    if (subcomando === 'quitar') {
       if (!objetivo) {
         return sock.sendMessage(jid, { text: advertencia(`Menciona a quien quitar.\nEjemplo: ${prefix}vozunica quitar @persona`, { titulo: 'FALTA LA PERSONA' }) });
       }
@@ -67,7 +70,8 @@ module.exports = {
       return sock.sendMessage(jid, { text: exito('Ya no queda nadie en la lista, asi que voz unica se apago por completo. Todos pueden hablar de nuevo.', { titulo: 'VOZ UNICA' }) });
     }
 
-    const objetivo = extraerObjetivo(msg);
+    // Cualquier otro caso: agregar a la persona mencionada/citada a la lista
+    // (esto cubre tanto ".vozunica @persona" como responder un mensaje sin escribir nada mas)
     if (!objetivo) {
       return sock.sendMessage(jid, { text: advertencia(`Menciona a la persona o responde su mensaje.\nEjemplo: ${prefix}vozunica @persona`, { titulo: 'FALTA LA PERSONA' }) });
     }
