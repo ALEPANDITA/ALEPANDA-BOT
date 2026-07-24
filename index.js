@@ -415,7 +415,7 @@ async function startBot() {
     }
 
     if (esGrupo) {
-      const { leerDB, guardarDB, getUsuario, getGrupo } = require('./lib/db');
+      const { leerDB, guardarDB, getUsuario, getGrupo, listaVozUnica } = require('./lib/db');
       const { darXp } = require('./lib/niveles');
       const db = leerDB();
       const remitente = msg.key.participant;
