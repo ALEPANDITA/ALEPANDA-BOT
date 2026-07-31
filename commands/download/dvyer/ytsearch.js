@@ -124,43 +124,12 @@ module.exports = {
 
     const acortar = (t) => (t.length > 55 ? t.slice(0, 52) + '...' : t);
 
-    // 1) Intento principal: carrusel deslizable de tarjetas (una por video),
-    // usando el formato "cards" a nivel superior -- igual que este fork ya usa
-    // "sections/rows" para la lista de abajo (formato amigable de alto nivel,
-    // no el protobuf crudo). El soporte de carruseles varia segun la version
-    // exacta de Baileys/fork que uses, asi que si falla, se cae automaticamente
-    // al respaldo de siempre (texto + miniaturas + lista). Nunca se pierde
-    // funcionalidad, solo se intenta primero la version mas bonita.
-    let carruselEnviado = false;
-    try {
-      await sock.sendMessage(jid, {
-        text: `🌸 Resultados para: *${query}*`,
-        footer: 'ALEPANDA BOT',
-        title: '🎬 Desliza para ver mas resultados',
-        cards: videos
-          .filter(v => v.thumbnail)
-          .map((v, i) => ({
-            image: { url: v.thumbnail },
-            title: acortar(v.title),
-            body: `${v.author || 'Desconocido'} • ${formatearDuracion(v.duration)} • ${formatearVistas(v.views)} vistas`,
-            footer: `Resultado ${i + 1} de ${videos.length}`,
-            buttons: [
-              { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎵 Descargar MP3', id: `${prefix}ytmp3 ${i + 1}` }) },
-              { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎬 Descargar MP4', id: `${prefix}ytmp4 ${i + 1}` }) }
-            ]
-          }))
-      }, { quoted: msg });
-      carruselEnviado = true;
-      console.log('[ytsearch] Carrusel deslizable enviado correctamente.');
-    } catch (err) {
-      console.warn('[ytsearch] El carrusel deslizable no se pudo enviar (puede que este fork/version no lo soporte):', err.message);
-    }
-
-    if (carruselEnviado) return;
-
-    // 2) Respaldo de siempre: texto con la lista + miniaturas sueltas
-    // (WhatsApp suele agruparlas como galeria deslizable de forma nativa)
-    // + lista interactiva simple.
+    // Nota: se quito el intento de "carrusel deslizable" (formato "cards" a nivel
+    // superior). No es un tipo de mensaje estandar de Baileys: en muchos forks
+    // sock.sendMessage lo acepta sin lanzar error, pero WhatsApp nunca lo entrega,
+    // asi que el bot creia que ya habia respondido y se quedaba sin mandar nada.
+    // Se deja unicamente el metodo de abajo, que es el que siempre funciona:
+    // texto con la lista + miniaturas sueltas + lista interactiva simple.
     const listado = videos.map((v, i) =>
       `*${i + 1}. ${v.title}*\n` +
       `Canal: ${v.author || 'Desconocido'} | Duracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}\n` +
