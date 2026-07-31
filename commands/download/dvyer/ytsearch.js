@@ -1,6 +1,6 @@
 const { buscarYoutubeVarios, limpiarTexto } = require('../../../lib/dvyerapi');
 const { guardarBusqueda } = require('../../../lib/busquedas');
-const { generateWAMessageFromContent, generateWAMessage } = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, generateWAMessage, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 function formatearDuracion(segundos = 0) {
   const sec = Number(segundos) || 0;
@@ -125,12 +125,76 @@ module.exports = {
 
     const acortar = (t) => (t.length > 55 ? t.slice(0, 52) + '...' : t);
 
-    // Nota: se quito el intento de "carrusel deslizable" (formato "cards" a nivel
-    // superior). No es un tipo de mensaje estandar de Baileys: en muchos forks
-    // sock.sendMessage lo acepta sin lanzar error, pero WhatsApp nunca lo entrega,
-    // asi que el bot creia que ya habia respondido y se quedaba sin mandar nada.
-    // Se deja unicamente el metodo de abajo, que es el que siempre funciona:
-    // texto con la lista + miniaturas sueltas + lista interactiva simple.
+    // 1) Intento principal: carrusel deslizable de verdad, construido a mano con
+    // el .proto real de WhatsApp (Message.InteractiveMessage.CarouselMessage).
+    // No es un formato documentado con un helper oficial en Baileys, pero el
+    // .proto SI lo define (verificado en WAProto/WAProto.proto de esta misma
+    // instalacion), asi que se arma directo con las piezas oficiales:
+    // generateWAMessageFromContent + prepareWAMessageMedia + relayMessage.
+    // Cada tarjeta es, a su vez, otra InteractiveMessage completa (con su propio
+    // header/imagen, body y botones). Si algo de esto falla (version de WhatsApp
+    // que no lo soporte, error subiendo media, etc.), cae automaticamente al
+    // metodo de respaldo de siempre (texto + album/miniaturas + lista).
+    let carruselEnviado = false;
+    try {
+      const conMiniaturaParaCarrusel = videos
+        .map((v, i) => ({ v, i }))
+        .filter(({ v }) => v.thumbnail);
+
+      if (conMiniaturaParaCarrusel.length >= 2) {
+        const tarjetas = [];
+
+        for (const { v, i } of conMiniaturaParaCarrusel) {
+          const contenidoImagen = await prepareWAMessageMedia(
+            { image: { url: v.thumbnail } },
+            { upload: sock.waUploadToServer }
+          );
+
+          tarjetas.push({
+            header: {
+              title: acortar(v.title),
+              hasMediaAttachment: true,
+              imageMessage: contenidoImagen.imageMessage
+            },
+            body: {
+              text: `${v.author || 'Desconocido'} • ${formatearDuracion(v.duration)} • ${formatearVistas(v.views)} vistas`
+            },
+            footer: { text: `Resultado ${i + 1} de ${videos.length}` },
+            nativeFlowMessage: {
+              buttons: [
+                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎵 Descargar MP3', id: `${prefix}ytmp3 ${i + 1}` }) },
+                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎬 Descargar MP4', id: `${prefix}ytmp4 ${i + 1}` }) }
+              ]
+            }
+          });
+        }
+
+        const miJid = sock.user?.id || sock.authState?.creds?.me?.id;
+
+        const mensajeCarrusel = generateWAMessageFromContent(jid, {
+          interactiveMessage: {
+            body: { text: `🌸 Resultados para: *${query}*` },
+            footer: { text: 'ALEPANDA BOT' },
+            carouselMessage: {
+              cards: tarjetas,
+              messageVersion: 2
+            }
+          }
+        }, { userJid: miJid, quoted: msg });
+
+        await sock.relayMessage(jid, mensajeCarrusel.message, { messageId: mensajeCarrusel.key.id });
+
+        carruselEnviado = true;
+        console.log('[ytsearch] Carrusel deslizable (armado a mano) enviado correctamente.');
+      }
+    } catch (err) {
+      console.warn('[ytsearch] El carrusel a mano fallo, se usa el metodo de respaldo. Detalle:', err.message);
+    }
+
+    if (carruselEnviado) return;
+
+    // 2) Respaldo de siempre (si el carrusel no se pudo armar/enviar): texto con
+    // la lista + miniaturas agrupadas en album (o sueltas) + lista interactiva.
     const listado = videos.map((v, i) =>
       `*${i + 1}. ${v.title}*\n` +
       `Canal: ${v.author || 'Desconocido'} | Duracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}\n` +
