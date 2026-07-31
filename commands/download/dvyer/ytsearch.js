@@ -1,5 +1,6 @@
 const { buscarYoutubeVarios, limpiarTexto } = require('../../../lib/dvyerapi');
 const { guardarBusqueda } = require('../../../lib/busquedas');
+const { generateWAMessageFromContent, generateWAMessage } = require('@whiskeysockets/baileys');
 
 function formatearDuracion(segundos = 0) {
   const sec = Number(segundos) || 0;
@@ -141,25 +142,52 @@ module.exports = {
     });
 
     // Miniaturas agrupadas en un solo mensaje tipo "album" (igual que cuando mandas
-    // varias fotos juntas manualmente en WhatsApp). sock.sendAlbumMessage existe en
-    // Baileys 6.7+; si tu fork especifico no lo trae, cae al metodo suelto de siempre.
+    // varias fotos juntas manualmente en WhatsApp). @whiskeysockets/baileys NO trae
+    // un helper "sendAlbumMessage" (es una funcion que solo agregaron algunos forks
+    // comunitarios, y de hecho el soporte de albumes sigue como issue abierto sin
+    // resolver en el repo oficial: github.com/WhiskeySockets/Baileys/issues/775).
+    //
+    // Aun asi, se puede construir a mano con las piezas que SI son oficiales:
+    // 1) Se manda un mensaje "albumMessage" vacio, avisando cuantas imagenes vienen.
+    // 2) Cada imagen se manda por separado, pero enlazada a ese mensaje via
+    //    messageContextInfo.messageAssociation (asociandola como "hija" del album).
+    // Esto replica lo que hacen los forks que si lo soportan, pero es un formato
+    // NO documentado oficialmente por WhatsApp/Baileys, asi que no hay garantia total
+    // de que WhatsApp lo renderice igual en todos los clientes/versiones. Si falla,
+    // cae automaticamente al metodo de siempre (miniaturas sueltas).
     const conMiniatura = videos.filter(v => v.thumbnail);
 
     let albumEnviado = false;
-    if (conMiniatura.length > 1 && typeof sock.sendAlbumMessage === 'function') {
+    if (conMiniatura.length > 1) {
       try {
-        await sock.sendAlbumMessage(
-          jid,
-          conMiniatura.map((v, i) => ({
+        const miJid = sock.user?.id || sock.authState?.creds?.me?.id;
+
+        const mensajeAlbum = generateWAMessageFromContent(jid, {
+          albumMessage: {
+            expectedImageCount: conMiniatura.length,
+            expectedVideoCount: 0
+          }
+        }, { userJid: miJid, quoted: msg });
+
+        await sock.relayMessage(jid, mensajeAlbum.message, { messageId: mensajeAlbum.key.id });
+
+        for (const v of conMiniatura) {
+          const mensajeImagen = await generateWAMessage(jid, {
             image: { url: v.thumbnail },
             caption: `${videos.indexOf(v) + 1}`
-          })),
-          { quoted: msg }
-        );
+          }, { upload: sock.waUploadToServer });
+
+          mensajeImagen.message.messageContextInfo = {
+            messageAssociation: { associationType: 1, parentMessageKey: mensajeAlbum.key }
+          };
+
+          await sock.relayMessage(jid, mensajeImagen.message, { messageId: mensajeImagen.key.id });
+        }
+
         albumEnviado = true;
-        console.log('[ytsearch] Album de miniaturas enviado correctamente.');
+        console.log('[ytsearch] Album armado a mano y enviado.');
       } catch (err) {
-        console.warn('[ytsearch] sendAlbumMessage fallo, se manda cada miniatura por separado. Detalle:', err.message);
+        console.warn('[ytsearch] El album armado a mano fallo, se manda cada miniatura por separado. Detalle:', err.message);
       }
     }
 
