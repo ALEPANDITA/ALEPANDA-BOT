@@ -15,9 +15,11 @@ module.exports = {
       return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS', estilo: 'neon' }) });
     }
 
-    const partes = texto.trim().split(/\s+/);
-    const servicio = partes[1]?.toLowerCase();
-    const numero = partes[2];
+    const prefEscapado = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const resto = texto.replace(new RegExp(`^\\s*${prefEscapado}\\s*delapikey\\s*`, 'i'), '').trim();
+    const partes = resto.split(/\s+/).filter(Boolean);
+    const servicio = partes[0]?.toLowerCase();
+    const numero = partes[1];
 
     if (!servicio || !numero) {
       return sock.sendMessage(jid, {
