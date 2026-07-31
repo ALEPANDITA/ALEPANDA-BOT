@@ -27,3 +27,4 @@ session/
 *.session
 .env
 gemini-key-state.json
+auth_info/
