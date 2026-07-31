@@ -16,6 +16,14 @@ function formatearVistas(numero = 0) {
   return n.toString();
 }
 
+const TIMEOUT_MEDIA_MS = 12000;
+function conTimeout(promesa, ms, mensajeError) {
+  return Promise.race([
+    promesa,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(mensajeError)), ms))
+  ]);
+}
+
 // Intenta primero con la libreria yt-search (busqueda directa, sin depender
 // de la API externa). Si falla -por ejemplo el bloqueo 302 que da YouTube
 // a IPs de datacenter/VPS- cae automaticamente a la API DVYER.
@@ -145,9 +153,13 @@ module.exports = {
         const tarjetas = [];
 
         for (const { v, i } of conMiniaturaParaCarrusel) {
-          const contenidoImagen = await prepareWAMessageMedia(
-            { image: { url: v.thumbnail } },
-            { upload: sock.waUploadToServer }
+          const contenidoImagen = await conTimeout(
+            prepareWAMessageMedia(
+              { image: { url: v.thumbnail } },
+              { upload: sock.waUploadToServer }
+            ),
+            TIMEOUT_MEDIA_MS,
+            `Timeout preparando la miniatura del video ${i + 1}`
           );
 
           tarjetas.push({
@@ -236,10 +248,14 @@ module.exports = {
         await sock.relayMessage(jid, mensajeAlbum.message, { messageId: mensajeAlbum.key.id });
 
         for (const v of conMiniatura) {
-          const mensajeImagen = await generateWAMessage(jid, {
-            image: { url: v.thumbnail },
-            caption: `${videos.indexOf(v) + 1}`
-          }, { upload: sock.waUploadToServer });
+          const mensajeImagen = await conTimeout(
+            generateWAMessage(jid, {
+              image: { url: v.thumbnail },
+              caption: `${videos.indexOf(v) + 1}`
+            }, { upload: sock.waUploadToServer }),
+            TIMEOUT_MEDIA_MS,
+            `Timeout preparando la miniatura ${videos.indexOf(v) + 1} del album`
+          );
 
           mensajeImagen.message.messageContextInfo = {
             messageAssociation: { associationType: 1, parentMessageKey: mensajeAlbum.key }
