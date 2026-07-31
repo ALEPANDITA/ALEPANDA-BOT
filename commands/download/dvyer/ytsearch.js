@@ -140,15 +140,40 @@ module.exports = {
       text: `🌸 Resultados para: *${query}*\n\n${listado}`
     });
 
-    for (let i = 0; i < videos.length; i++) {
-      const v = videos[i];
+    // Miniaturas agrupadas en un solo mensaje tipo "album" (igual que cuando mandas
+    // varias fotos juntas manualmente en WhatsApp). sock.sendAlbumMessage existe en
+    // Baileys 6.7+; si tu fork especifico no lo trae, cae al metodo suelto de siempre.
+    const conMiniatura = videos.filter(v => v.thumbnail);
+
+    let albumEnviado = false;
+    if (conMiniatura.length > 1 && typeof sock.sendAlbumMessage === 'function') {
       try {
-        if (v.thumbnail) {
-          await sock.sendMessage(jid, { image: { url: v.thumbnail }, caption: `${i + 1}` });
-        }
-        console.log(`[ytsearch] resultado ${i + 1}/${videos.length} enviado`);
+        await sock.sendAlbumMessage(
+          jid,
+          conMiniatura.map((v, i) => ({
+            image: { url: v.thumbnail },
+            caption: `${videos.indexOf(v) + 1}`
+          })),
+          { quoted: msg }
+        );
+        albumEnviado = true;
+        console.log('[ytsearch] Album de miniaturas enviado correctamente.');
       } catch (err) {
-        console.error(`[ytsearch] error enviando miniatura ${i + 1}/${videos.length}:`, err.message);
+        console.warn('[ytsearch] sendAlbumMessage fallo, se manda cada miniatura por separado. Detalle:', err.message);
+      }
+    }
+
+    if (!albumEnviado) {
+      for (let i = 0; i < videos.length; i++) {
+        const v = videos[i];
+        try {
+          if (v.thumbnail) {
+            await sock.sendMessage(jid, { image: { url: v.thumbnail }, caption: `${i + 1}` });
+          }
+          console.log(`[ytsearch] resultado ${i + 1}/${videos.length} enviado`);
+        } catch (err) {
+          console.error(`[ytsearch] error enviando miniatura ${i + 1}/${videos.length}:`, err.message);
+        }
       }
     }
 
