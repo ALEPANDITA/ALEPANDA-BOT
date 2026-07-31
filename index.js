@@ -122,7 +122,7 @@ async function startBot() {
   const sock = makeWASocket({
     version,
     auth: state,
-    browser: metodo?.trim() === '2' ? Browsers.macOS('Desktop') : Browsers.ubuntu('Chrome'),
+    browser: metodo?.trim() === '2' ? Browsers.macOS('Safari') : Browsers.ubuntu('Chrome'),
     logger: pino({ level: 'error' }),
   });
 
@@ -190,7 +190,7 @@ async function startBot() {
         try {
           await new Promise(r => setTimeout(r, 5000 + 3000 * intento));
           if (socketCerrado) break;
-          codigo = await sock.requestPairingCode(numero.trim(), 'PANDA123');
+          codigo = await sock.requestPairingCode(numero.trim());
         } catch (err) {
           console.log(`Intento ${intento} fallo:`, err.message);
         }
