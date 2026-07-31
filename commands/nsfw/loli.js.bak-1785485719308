@@ -1,0 +1,24 @@
+const { error: cajaError } = require('../../lib/estilo');
+
+module.exports = {
+  name: 'loli',
+  category: 'nsfw',
+  description: 'Busca imágenes lolis. Uso: .loli',
+  execute: async (sock, jid, msg, { texto, prefix }) => {
+    try {
+      const res = await fetch(`https://api.evogb.org/nsfw/random/loli`);
+      if (!res.ok) {
+        throw new Error(`Error al buscar: ${res.statusText}`);
+      }
+      const json = await res.json();
+      if (!json.status) {
+        throw new Error('Error al buscar');
+      }
+      const { url, mime } = json.data;
+      await sock.sendMessage(jid, { image: { url }, caption: 'Imagen loli' });
+    } catch (err) {
+      console.error(err);
+      await sock.sendMessage(jid, { text: cajaError(`Ocurrio un error: ${err.message}`) });
+    }
+  }
+};
