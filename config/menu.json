@@ -1,0 +1,21 @@
+{
+  "titulo": "MENU DEL BOT",
+  "footer": "Escribe el comando tal como aparece arriba",
+  "orden": ["general", "admin", "owner", "economia", "casino"],
+  "iconos": {
+    "admin": "🛡️",
+    "owner": "👑",
+    "general": "⚙️",
+    "perfil": "🙍",
+    "economia": "💰",
+    "casino": "🎰"
+  },
+  "nombresCategorias": {
+    "admin": "ADMINISTRACION",
+    "owner": "OWNER",
+    "general": "GENERAL",
+    "perfil": "PERFIL",
+    "economia": "ECONOMIA",
+    "casino": "CASINO"
+  }
+}

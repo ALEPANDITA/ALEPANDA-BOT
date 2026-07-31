@@ -1,0 +1,31 @@
+FIX: .ytsearch con 3er respaldo (Invidious) - ALEPANDA-BOT
+==============================================================
+
+1 archivo: commands/download/ytsearch.js
+
+Orden de intentos ahora:
+  1) yt-search (libreria) - directo a YouTube. Falla en VPS/datacenter
+     por el bloqueo 302 de YouTube a esas IPs.
+  2) API DVYER - si esta caida/con problemas, sigue al paso 3.
+  3) NUEVO: instancias publicas de Invidious (frontend alterno de
+     YouTube con API de busqueda propia). No depende de scrapear
+     youtube.com directo ni de que DVYER este sano.
+
+Si los 3 fallan, el bot manda un mensaje claro (incluyendo el aviso
+de "falta tu API key" si ese fue el problema con DVYER).
+
+MISMO FLUJO QUE SIEMPRE (Termux -> GitHub -> VPS):
+
+cd ~/ALEPANDA-BOT
+# reemplaza commands/download/ytsearch.js con el de este zip
+git add commands/download/ytsearch.js
+git commit -m "fix: ytsearch con respaldo Invidious"
+git push
+
+Luego en el VPS por WhatsApp: .update (o como actualices tu)
+
+NOTA: las instancias publicas de Invidious que puse en el codigo
+pueden cambiar o caerse con el tiempo (son mantenidas por voluntarios).
+Si en unos meses .ytsearch vuelve a fallar en los 3 metodos, prueba
+cambiar la lista INSTANCIAS_INVIDIOUS por instancias activas actuales
+(se pueden buscar en instances.invidious.io).

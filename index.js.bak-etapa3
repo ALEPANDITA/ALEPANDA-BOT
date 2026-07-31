@@ -1,0 +1,301 @@
+require('net').setDefaultAutoSelectFamily(false);
+require('dns').setDefaultResultOrder('ipv4first');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestWaWebVersion, Browsers } = require('@whiskeysockets/baileys');
+const chalk = require('chalk');
+const qrcode = require('qrcode-terminal');
+const { Boom } = require('@hapi/boom');
+const readline = require('readline');
+const pino = require('pino');
+
+const { leerConfig } = require('./lib/config');
+const { esOwnerBot } = require('./lib/permisos');
+const { leerDB, getGrupo, getUsuario } = require('./lib/db');
+
+const fs = require('fs');
+const path = require('path');
+
+const EMOJIS_POR_CATEGORIA = {
+  download: '🔍',
+  fun: '🎉',
+  admin: '🛠️',
+  economia: '💰',
+  casino: '🎰',
+  owner: '👑',
+  ia: '🤖',
+  general: 'ℹ️',
+  perfil: '🪪',
+  default: '⚡',
+  nsfw: '💗'
+};
+
+function normalizarComando(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function listarJsRecursivo(dir) {
+  let resultado = [];
+  for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rutaCompleta = path.join(dir, entrada.name);
+    if (entrada.isDirectory()) {
+      resultado = resultado.concat(listarJsRecursivo(rutaCompleta));
+    } else if (entrada.name.endsWith('.js')) {
+      resultado.push(rutaCompleta);
+    }
+  }
+  return resultado;
+}
+
+function cargarComandos() {
+  const comandos = new Map();
+  const basePath = path.join(__dirname, 'commands');
+  const categorias = fs.readdirSync(basePath);
+
+  for (const categoria of categorias) {
+    const catPath = path.join(basePath, categoria);
+    if (!fs.statSync(catPath).isDirectory()) continue;
+
+    const archivos = listarJsRecursivo(catPath);
+    for (const rutaArchivo of archivos) {
+      const exportado = require(rutaArchivo);
+      const lista = Array.isArray(exportado) ? exportado : [exportado];
+      for (const comando of lista) {
+        if (!comando._rutaArchivo) comando._rutaArchivo = rutaArchivo;
+        comandos.set(comando.name, comando);
+        if (Array.isArray(comando.aliases)) {
+          for (const alias of comando.aliases) {
+            comandos.set(alias, comando);
+          }
+        }
+      }
+    }
+  }
+  return comandos;
+}
+
+console.log('📦 Cargando comandos...');
+const comandos = cargarComandos();
+console.log(`✅ ${comandos.size} comandos/alias cargados sin errores.`);
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const pregunta = (texto) => new Promise((resolve) => rl.question(texto, resolve));
+
+process.on('uncaughtException', (err) => {
+  console.error('Error no capturado:', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Promesa rechazada sin manejar (COMPLETO):', err);
+});
+
+let reiniciando = false;
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+  console.log('📂 Sesión auth_info cargada.');
+  const { version } = await fetchLatestWaWebVersion();
+  console.log('🌐 Version de WhatsApp Web obtenida:', version);
+
+  let metodo = null;
+  const yaRegistrado = fs.existsSync(path.join(__dirname, 'auth_info', 'creds.json'));
+
+  if (!yaRegistrado) {
+    if (process.stdout.isTTY) {
+      console.log('Seleccione una opcion:');
+      console.log('1. Con codigo QR');
+      console.log('2. Con codigo de texto de 8 digitos');
+      metodo = await pregunta('> ');
+    } else {
+      metodo = '1';
+      console.log('Modo automatico: usando QR');
+    }
+  }
+
+  console.log('🔌 Intentando abrir conexion con WhatsApp...');
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    browser: metodo?.trim() === '2' ? Browsers.macOS('Desktop') : Browsers.ubuntu('Chrome'),
+    logger: pino({ level: 'error' }),
+  });
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
+    if (update.qr) console.log('✅ Llego un QR nuevo.');
+    console.log('📶 Estado de conexion:', connection || '(sin cambio)');
+    if (lastDisconnect?.error) console.log('⚠️  Motivo de desconexion:', lastDisconnect.error.message);
+
+    if (connection === 'close') {
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      console.log('❌ Se cerró la conexión. Razón:', reason, lastDisconnect?.error?.message);
+
+      if (reason === DisconnectReason.loggedOut) {
+        console.log('Sesion cerrada, borra la carpeta auth_info y vuelve a intentar.');
+        return;
+      }
+
+      if (reason === DisconnectReason.restartRequired) {
+        console.log('WhatsApp pidio reiniciar la conexion (normal durante pairing). Reiniciando...');
+        if (!reiniciando) {
+          reiniciando = true;
+          setTimeout(() => { reiniciando = false; startBot(); }, 1500);
+        }
+        return;
+      }
+
+      if (sock.authState.creds.registered) {
+        if (reiniciando) return;
+        reiniciando = true;
+        setTimeout(() => { reiniciando = false; startBot(); }, 2000);
+      } else {
+        console.log('Conexion cerrada durante pairing/QR.');
+      }
+      return;
+    }
+
+    if (connection === 'open') {
+      console.log(chalk.green.bold('✅ Bot conectado correctamente (ETAPA 3 OK)'));
+    }
+  });
+
+  if (!sock.authState.creds.registered) {
+    if (metodo?.trim() === '1') {
+      sock.ev.on('connection.update', (update) => {
+        if (update.qr) {
+          qrcode.generate(update.qr, { small: true });
+          console.log('Escanea este codigo QR desde WhatsApp > Dispositivos vinculados');
+        }
+      });
+    } else {
+      const numero = await pregunta('Escribe tu numero con codigo de pais (ej: 5217712345678): ');
+      let codigo = null;
+      let socketCerrado = false;
+      const onClose = (u) => { if (u.connection === 'close') socketCerrado = true; };
+      sock.ev.on('connection.update', onClose);
+
+      for (let intento = 1; intento <= 5 && !codigo; intento++) {
+        if (socketCerrado) break;
+        try {
+          await new Promise(r => setTimeout(r, 5000 + 3000 * intento));
+          if (socketCerrado) break;
+          codigo = await sock.requestPairingCode(numero.trim(), 'PANDA123');
+        } catch (err) {
+          console.log(`Intento ${intento} fallo:`, err.message);
+        }
+      }
+      sock.ev.off('connection.update', onClose);
+
+      if (!codigo) {
+        console.log('No se pudo obtener el codigo de vinculacion.');
+        process.exit(1);
+      }
+      console.log(`🔑 Tu codigo de vinculacion es: ${codigo}`);
+    }
+  }
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    const config = leerConfig();
+    const jid = msg.key.remoteJid;
+    const texto = (
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      msg.message.imageMessage?.caption ||
+      msg.message.videoMessage?.caption ||
+      ''
+    ).trim();
+    const esGrupo = jid.endsWith('@g.us');
+
+    if (texto) console.log(`💬 [${jid}] ${msg.pushName || ''}: ${texto}`);
+
+    if (config.soloOwner) {
+      const esOwnerCheckPrivado = await esOwnerBot(sock, config, msg);
+      if (!esOwnerCheckPrivado) return;
+    }
+
+    let prefix = config.prefix || '.';
+    if (esGrupo) {
+      const db = leerDB();
+      const grupo = getGrupo(db, jid);
+      if (grupo.prefix) prefix = grupo.prefix;
+    }
+
+    if (!texto.startsWith(prefix)) return;
+
+    const args = texto.slice(prefix.length).trim().split(/\s+/);
+    const nombreComando = args[0];
+    const comando = comandos.get(normalizarComando(nombreComando));
+
+    if (!comando) return;
+
+    if (comando.groupOnly && !esGrupo) {
+      return sock.sendMessage(jid, { text: 'Este comando solo funciona dentro de un grupo.' });
+    }
+
+    if (esGrupo) {
+      const dbCheck = leerDB();
+      const grupoCheck = getGrupo(dbCheck, jid);
+      const remitenteCheck = msg.key.participant;
+      const esOwnerCheck = await esOwnerBot(sock, config, msg);
+
+      let metadataCheck = null;
+      let esAdminCheck = false;
+
+      if (grupoCheck.soloAdmins || (grupoCheck.permisosCategorias && Object.keys(grupoCheck.permisosCategorias).length)) {
+        metadataCheck = await sock.groupMetadata(jid);
+        let remitenteResuelto = remitenteCheck;
+        try {
+          const [info] = await sock.onWhatsApp(remitenteCheck);
+          if (info?.lid) remitenteResuelto = info.lid;
+        } catch (e) {}
+        const remitenteNum = remitenteResuelto.split("@")[0];
+        esAdminCheck = metadataCheck.participants.find(p => {
+          const pId = (p.id || "").split("@")[0];
+          const pPhone = (p.phoneNumber || "").split("@")[0];
+          return pId === remitenteNum || pPhone === remitenteNum || pId === remitenteCheck.split("@")[0];
+        })?.admin;
+      }
+
+      if (grupoCheck.soloAdmins && !esAdminCheck && !esOwnerCheck) {
+        return;
+      }
+
+      const categoriaComando = comando.category || 'general';
+      const permisoCategoria = grupoCheck.permisosCategorias?.[categoriaComando];
+
+      if (permisoCategoria === 'admins' && !esAdminCheck && !esOwnerCheck) {
+        return sock.sendMessage(jid, {
+          text: `Los comandos de la categoria *${categoriaComando}* solo pueden ser usados por admins.`
+        });
+      }
+    }
+
+    if (esGrupo && comando.category === 'nsfw') {
+      const dbNsfw = leerDB();
+      const grupoNsfw = getGrupo(dbNsfw, jid);
+      if (!grupoNsfw.nsfw) {
+        return sock.sendMessage(
+          jid,
+          { text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.` },
+          { quoted: msg }
+        );
+      }
+    }
+
+    try {
+      const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
+      await sock.sendMessage(jid, { react: { text: emojiCategoria, key: msg.key } });
+      await comando.execute(sock, jid, msg, { prefix, texto, comandos });
+    } catch (err) {
+      console.error(err);
+      await sock.sendMessage(jid, { text: 'Ocurrio un error al ejecutar el comando.' });
+    }
+  });
+}
+
+startBot();

@@ -1,0 +1,69 @@
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
+const { Boom } = require('@hapi/boom')
+const pino = require('pino')
+const readline = require('readline')
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+const pregunta = (texto) => new Promise((resolve) => rl.question(texto, resolve))
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const logger = pino({ level: 'silent' })
+
+let numeroGuardado = null
+let conectando = false
+
+async function iniciar() {
+  if (conectando) return
+  conectando = true
+
+  console.log('Iniciando ALEPANDA-BOT-NUEVO (version minima de prueba)...')
+
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+  const sock = makeWASocket({
+    auth: state,
+    logger,
+    printQRInTerminal: false
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update
+
+    if (connection === 'close') {
+      conectando = false
+      const codigo = lastDisconnect?.error instanceof Boom
+        ? lastDisconnect.error.output.statusCode
+        : null
+
+      if (codigo === DisconnectReason.loggedOut) {
+        console.log('❌ Sesion cerrada desde el telefono. Borra la carpeta auth_info y vuelve a vincular.')
+        process.exit(0)
+      } else {
+        console.log('⚠️  Conexion perdida, reconectando...')
+        await esperar(2000)
+        iniciar()
+      }
+    } else if (connection === 'open') {
+      console.log('✅ Bot conectado correctamente a WhatsApp')
+    }
+  })
+
+  if (!sock.authState.creds.registered) {
+    if (!numeroGuardado) {
+      numeroGuardado = await pregunta('📱 Escribe tu numero con codigo de pais, sin + ni espacios (ej. 5217712345678): ')
+    }
+    await esperar(3000)
+    try {
+      const codigo = await sock.requestPairingCode(numeroGuardado.trim())
+      console.log('🔑 Tu codigo de vinculacion es: ' + codigo)
+    } catch (err) {
+      console.log('❌ No se pudo generar el codigo de vinculacion: ' + err.message)
+    }
+  }
+}
+
+iniciar().catch((err) => {
+  console.log('❌ Error fatal al iniciar el bot: ' + err.message)
+})
