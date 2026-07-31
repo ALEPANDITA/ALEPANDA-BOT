@@ -26,7 +26,8 @@ module.exports = {
       return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS', estilo: 'neon' }) });
     }
 
-    const nombreBuscado = normalizar((texto || '').split(/\s+/)[0]);
+    const args = (texto || '').trim().split(/\s+/).slice(1);
+    const nombreBuscado = normalizar(args[0]);
     if (!nombreBuscado) {
       return sock.sendMessage(jid, {
         text: advertencia(`Dime el nombre (o alias) del comando a quitar, ej:\n${prefix}delcmd 8ball`, { titulo: 'FALTA EL NOMBRE', estilo: 'neon' })
