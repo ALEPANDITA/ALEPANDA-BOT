@@ -90,7 +90,7 @@ module.exports = {
     const prompt = construirPromptArreglo({
       descripcionOriginal: `Comando existente llamado "${comando.name}" (categoria: ${comando.category || 'general'}). Descripcion original: ${comando.description || '(sin descripcion)'}`,
       codigoAnterior: codigoActual,
-      errorAnterior: '(el owner reporta el siguiente problema en produccion, no es un error de validacion)',
+      errorAnterior: '(el owner reporta el siguiente problema en produccion: mamada me ayudas a qué los @ sean al revés que el que si yo etiqueto a alguien el sea que el que de la mamada ?)',
       aclaracionUsuario: descripcionProblema
     });
 
