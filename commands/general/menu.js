@@ -51,7 +51,7 @@ function renderizarCategoria(cat, categorias, prefix, emojiComando) {
 
 module.exports = {
   name: 'menu',
-  aliases: Array.from({ length: MAX_PAGINAS_ALIAS }, (_, i) => `menu${i + 1}`),
+  aliasesOcultas: Array.from({ length: MAX_PAGINAS_ALIAS }, (_, i) => `menu${i + 1}`),
   category: 'general',
   description: 'Muestra el menu de comandos (o una categoria a la vez con .menu1, .menu2, etc)',
   execute: async (sock, jid, msg, { prefix, texto, comandos }) => {
