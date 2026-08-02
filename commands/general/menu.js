@@ -4,23 +4,51 @@ const path = require('path');
 
 const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
 const videoPath = path.join(__dirname, '..', '..', 'assets', 'menu.mp4');
-const ordenCategorias = ['general', 'subbot', 'download', 'casino', 'gacha', 'gacha-anime', 'fun', 'admin', 'owner', 'economia', 'perfil', 'anime', 'ia', 'tools'];
+const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'owner', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'config', 'nsfw'];
 
+// Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
 const MAX_PAGINAS_ALIAS = 20;
 
 const EMOJI_CATEGORIA = {
-  general: '🦉', subbot: '🔥', download: '🪄', casino: '🎲', gacha: '⚡',
-  'gacha-anime': '🎴', fun: '🎉', admin: '🛡️', owner: '👑', economia: '💰',
-  perfil: '🧙', anime: '🎌', ia: '🔮', tools: '🧰'
+  general: '🏠',
+  subbot: '🤖',
+  download: '⬇️',
+  casino: '🎲',
+  gacha: '🎁',
+  'gacha-anime': '🎴',
+  fun: '🎉',
+  admin: '🛡️',
+  owner: '👑',
+  economia: '💰',
+  perfil: '🪪',
+  anime: '🎌',
+  ia: '🔮',
+  tools: '🧰',
+  config: '⚙️',
+  interaction: '🤝',
+  niveles: '🏅',
+  nsfw: '🔞'
 };
 
 const NOMBRE_CATEGORIA = {
-  general: 'GUARIDA PANDA (General)', subbot: 'CLAN DE SOMBRAS (Subbots)',
-  download: 'ARSENAL DE GARRAS (Descargas)', casino: 'CALLEJON DEL BAMBU NEGRO (Casino)',
-  gacha: 'RULETA DEL DESTINO (Gacha)', 'gacha-anime': 'GACHA ANIME',
-  fun: 'MANADA SALVAJE (Diversion)', owner: 'ALFA DEL CLAN (Owner)', anime: 'ANIME',
-  admin: 'GUARDIANES DEL BAMBU (Administracion)', economia: 'BOVEDA DE BAMBU (Economia)',
-  perfil: 'FICHA DE GUERRERO (Perfil)', ia: 'ORACULO PANDA (IA)', tools: 'HERRAMIENTAS'
+  general: 'GUARIDA PANDA (General)',
+  subbot: 'CLAN DE SOMBRAS (Subbots)',
+  download: 'ARSENAL DE GARRAS (Descargas)',
+  casino: 'CALLEJON DEL BAMBU NEGRO (Casino)',
+  gacha: 'RULETA DEL DESTINO (Gacha)',
+  'gacha-anime': 'GACHA ANIME',
+  fun: 'MANADA SALVAJE (Diversion)',
+  owner: 'ALFA DEL CLAN (Owner)',
+  anime: 'ANIME',
+  admin: 'GUARDIANES DEL BAMBU (Administracion)',
+  economia: 'BOVEDA DE BAMBU (Economia)',
+  perfil: 'FICHA DE GUERRERO (Perfil)',
+  ia: 'ORACULO PANDA (IA)',
+  tools: 'HERRAMIENTAS',
+  config: 'CONFIGURACION DEL CLAN (Config)',
+  interaction: 'CONTACTO DE MANADA (Interacciones)',
+  niveles: 'SENDERO DEL GUERRERO (Niveles)',
+  nsfw: 'RINCON PROHIBIDO (NSFW)'
 };
 
 function saludoSegunHora() {
@@ -51,6 +79,9 @@ function renderizarCategoria(cat, categorias, prefix, emojiComando) {
 
 module.exports = {
   name: 'menu',
+  // Ojo: estos van en 'aliasesOcultas' (no en 'aliases') a proposito. El bot los
+  // registra igual para que .menu2, .menu3, etc funcionen, pero al no estar en
+  // 'aliases' no aparecen listados junto a .menu en el propio .menu.
   aliasesOcultas: Array.from({ length: MAX_PAGINAS_ALIAS }, (_, i) => `menu${i + 1}`),
   category: 'general',
   description: 'Muestra el menu de comandos (o una categoria a la vez con .menu1, .menu2, etc)',
@@ -78,9 +109,15 @@ module.exports = {
     const totalComandos = Object.values(categorias).reduce((acc, arr) => acc + arr.length, 0);
     const totalPaginas = categoriasOrdenadas.length;
 
-    const primeraPalabra = (texto || '').trim().split(/\s+/)[0] || '';
-    const matchPagina = primeraPalabra.match(/menu(\d+)$/i);
-    const paginaSolicitada = matchPagina ? parseInt(matchPagina[1], 10) : null;
+    // Detecta el numero de pagina de dos formas: pegado (.menu2) o como
+    // argumento separado con espacio (.menu 2) - las dos deben funcionar igual.
+    const partesTexto = (texto || '').trim().split(/\s+/);
+    const primeraPalabra = partesTexto[0] || '';
+    const segundaPalabra = partesTexto[1] || '';
+
+    const matchPegado = primeraPalabra.match(/menu(\d+)$/i);
+    const numeroSuelto = /^\d+$/.test(segundaPalabra) ? parseInt(segundaPalabra, 10) : null;
+    const paginaSolicitada = matchPegado ? parseInt(matchPegado[1], 10) : numeroSuelto;
 
     if (paginaSolicitada !== null) {
       if (paginaSolicitada < 1 || paginaSolicitada > totalPaginas) {
