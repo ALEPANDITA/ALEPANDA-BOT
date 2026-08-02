@@ -1,44 +1,11 @@
-const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot } = require('../../lib/permisos');
 const { advertencia, exito, error: cajaError, caja } = require('../../lib/estilo');
 const { generarTexto } = require('../../lib/gemini');
 const { construirPromptNuevo, construirPromptArreglo, limpiarCodigo } = require('../../lib/crearcmd-ia');
 const { obtenerEstado, guardarEstado, borrarEstado } = require('../../lib/crearcmd-estado');
-
-const CARPETA_COMANDOS = path.join(__dirname, '..', '..', 'commands');
-const CARPETA_STAGING = path.join(CARPETA_COMANDOS, '_staging');
-const RUTA_RUNNER = path.join(__dirname, '..', '..', 'lib', 'addcmd-runner.js');
-
-function sanitizar(nombre) {
-  return String(nombre || '')
-    .toLowerCase()
-    .trim()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9_-]/g, '');
-}
-
-function validarEnProcesoAparte(rutaArchivo) {
-  return new Promise((resolve) => {
-    execFile(
-      process.execPath,
-      [RUTA_RUNNER, rutaArchivo],
-      { timeout: 8000, maxBuffer: 2 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err && err.killed) {
-          return resolve({ ok: false, error: 'El archivo tardo demasiado en cargar (posible bucle infinito o proceso colgado). No se instalo.' });
-        }
-        try {
-          resolve(JSON.parse(String(stdout || '').trim()));
-        } catch (e) {
-          resolve({ ok: false, error: String(stderr || (err && err.message) || 'No se pudo validar el archivo.').slice(0, 3500) });
-        }
-      }
-    );
-  });
-}
+const { procesarYInstalarCodigo } = require('../../lib/crearcmd-instalar');
 
 module.exports = {
   name: 'crearcmd',
@@ -112,116 +79,33 @@ module.exports = {
       return sock.sendMessage(jid, { text: cajaError('La IA no devolvio ningun codigo utilizable. Intenta describir el comando con mas detalle.') });
     }
 
-    if (!fs.existsSync(CARPETA_STAGING)) fs.mkdirSync(CARPETA_STAGING, { recursive: true });
-    const rutaStaging = path.join(CARPETA_STAGING, `ia_${Date.now()}.js`);
-    fs.writeFileSync(rutaStaging, codigo);
-
-    const resultado = await validarEnProcesoAparte(rutaStaging);
+    const resultado = await procesarYInstalarCodigo({
+      codigo,
+      jid,
+      comandos,
+      descripcionOriginal: esArreglo ? estadoParaUsar.descripcionOriginal : descripcionUsuario,
+      rutaDestinoForzada: esArreglo ? estadoParaUsar.rutaArchivoFinal : null
+    });
 
     if (!resultado.ok) {
-      fs.unlinkSync(rutaStaging);
-      guardarEstado(jid, {
-        estado: 'fallo',
-        descripcionOriginal: esArreglo ? estadoParaUsar.descripcionOriginal : descripcionUsuario,
-        codigo,
-        error: resultado.error,
-        nombre: (estadoParaUsar && estadoParaUsar.nombre) || null,
-        categoria: (estadoParaUsar && estadoParaUsar.categoria) || null,
-        rutaArchivoFinal: (estadoParaUsar && estadoParaUsar.rutaArchivoFinal) || null
-      });
       return sock.sendMessage(jid, {
         text: caja(
-          [resultado.error || 'Error desconocido validando el codigo generado.', '', `Dime exactamente que pasa (o que deberia pasar) con ${prefix}crearcmd <lo que esta mal> y lo corrijo.`],
+          [resultado.mensajeError, '', `Dime exactamente que pasa (o que deberia pasar) con ${prefix}crearcmd <lo que esta mal> y lo corrijo.`],
           { titulo: 'NO FUNCIONO, REVISANDO', estilo: 'neon' }
         )
       });
     }
 
-    const listaComandos = resultado.comandos;
-    const categoria = sanitizar(listaComandos[0].category) || 'general';
-    const nombreBase = sanitizar(listaComandos[0].name) || `iacmd_${Date.now()}`;
-
-    // Si estamos arreglando un intento que YA se habia instalado antes, sobreescribimos ese mismo archivo.
-    // Si es nuevo (o el intento previo nunca se instalo), revisamos que no choque con un comando existente.
-    let rutaDestino;
-    if (esArreglo && estadoParaUsar.rutaArchivoFinal) {
-      rutaDestino = estadoParaUsar.rutaArchivoFinal;
-    } else {
-      const carpetaDestino = path.join(CARPETA_COMANDOS, categoria);
-      if (!fs.existsSync(carpetaDestino)) fs.mkdirSync(carpetaDestino, { recursive: true });
-      rutaDestino = path.join(carpetaDestino, `${nombreBase}.js`);
-
-      if (fs.existsSync(rutaDestino) && !comandos.get(nombreBase)?._creadoPorIA) {
-        fs.unlinkSync(rutaStaging);
-        guardarEstado(jid, {
-          estado: 'fallo',
-          descripcionOriginal: descripcionUsuario,
-          codigo,
-          error: `Ya existe un comando llamado "${nombreBase}" en la categoria "${categoria}" y no fue creado por ${prefix}crearcmd, asi que no lo voy a sobreescribir solo. Si quieres, dime que le cambie el nombre.`,
-          nombre: nombreBase,
-          categoria
-        });
-        return sock.sendMessage(jid, {
-          text: advertencia(`Ya existe un comando llamado "${nombreBase}" en la categoria "${categoria}". Dime que le cambie el nombre y lo corrijo.`, { titulo: 'YA EXISTE', estilo: 'neon' })
-        });
-      }
-    }
-
-    fs.copyFileSync(rutaStaging, rutaDestino);
-    fs.unlinkSync(rutaStaging);
-
-    let modulo;
-    try {
-      delete require.cache[require.resolve(rutaDestino)];
-      modulo = require(rutaDestino);
-    } catch (err) {
-      guardarEstado(jid, {
-        estado: 'fallo',
-        descripcionOriginal: esArreglo ? estadoParaUsar.descripcionOriginal : descripcionUsuario,
-        codigo,
-        error: String(err.stack || err).slice(0, 3500),
-        nombre: nombreBase,
-        categoria,
-        rutaArchivoFinal: rutaDestino
-      });
-      return sock.sendMessage(jid, {
-        text: caja([String(err.stack || err).slice(0, 3500), '', `Dime ${prefix}crearcmd <lo que pasa> y lo arreglo.`], { titulo: 'ERROR AL CARGAR', estilo: 'neon' })
-      });
-    }
-
-    const comandosNuevos = Array.isArray(modulo) ? modulo : [modulo];
-    const resumen = [];
-    for (const cmd of comandosNuevos) {
-      if (!cmd?.name || typeof cmd.execute !== 'function') continue;
-      cmd._rutaArchivo = rutaDestino;
-      cmd._creadoPorIA = true;
-      comandos.set(cmd.name, cmd);
-      if (Array.isArray(cmd.aliases)) {
-        for (const alias of cmd.aliases) comandos.set(alias, cmd);
-      }
+    const resumen = resultado.comandosInstalados.map((cmd) => {
       const aliasTxt = cmd.aliases?.length ? ` _(${cmd.aliases.map((a) => prefix + a).join(', ')})_` : '';
-      resumen.push(`${prefix}${cmd.name}${aliasTxt} — ${cmd.description || 'sin descripcion'}`);
-    }
-
-    if (!resumen.length) {
-      return sock.sendMessage(jid, { text: cajaError('El codigo se cargo pero no contenia ningun comando valido (falta name o execute).') });
-    }
-
-    guardarEstado(jid, {
-      estado: 'exito',
-      descripcionOriginal: esArreglo ? estadoParaUsar.descripcionOriginal : descripcionUsuario,
-      codigo,
-      error: null,
-      nombre: nombreBase,
-      categoria,
-      rutaArchivoFinal: rutaDestino
+      return `${prefix}${cmd.name}${aliasTxt} — ${cmd.description || 'sin descripcion'}`;
     });
 
     await sock.sendMessage(jid, {
       text: exito(
         `Instalado y activo YA, sin reiniciar el bot.\n\n` +
-        `Categoria: *${categoria}*\n` +
-        `Archivo: commands/${categoria}/${path.basename(rutaDestino)}\n\n` +
+        `Categoria: *${resultado.categoria}*\n` +
+        `Archivo: commands/${resultado.categoria}/${path.basename(resultado.rutaDestino)}\n\n` +
         `${resumen.join('\n')}\n\n` +
         `Si algo no funciona bien, dime exactamente que pasa con ${prefix}crearcmd <lo que esta mal> y lo corrijo sin que tengas que repetir toda la descripcion.`,
         { titulo: 'CREARCMD', estilo: 'neon' }
