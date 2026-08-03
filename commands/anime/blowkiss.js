@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { error: cajaError } = require('../../lib/estilo');
 
 // Helper para limpiar y formatear JID a usuario de WhatsApp (@s.whatsapp.net)
@@ -94,7 +95,7 @@ module.exports = {
       const mentions = Array.from(mentionsSet);
 
       // 4. Consultar API de reacción
-      const res = await fetch('https://api.evogb.org/sfw/interaction?type=snuggle&key=evogb-WPHlBOdu');
+      const res = await fetchEvogb('https://api.evogb.org/sfw/interaction?type=snuggle');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();

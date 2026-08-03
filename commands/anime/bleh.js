@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
@@ -24,7 +25,7 @@ module.exports = {
         caption = `@${senderNum} está aburrido/a 🥱`;
       }
 
-      const res = await fetch('https://api.evogb.org/sfw/interaction?type=bored&key=evogb-WPHlBOdu');
+      const res = await fetchEvogb('https://api.evogb.org/sfw/interaction?type=bored');
       const data = await res.json();
 
       if (!data || !data.status || !data.result) {

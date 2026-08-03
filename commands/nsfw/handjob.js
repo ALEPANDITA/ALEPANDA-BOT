@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
@@ -18,7 +19,7 @@ module.exports = {
     const sender = msg.key.participant || msg.key.remoteJid;
 
     try {
-      const response = await fetch('https://api.evogb.org/nsfw/interaction?type=handjob&key=evogb-WPHlBOdu');
+      const response = await fetchEvogb('https://api.evogb.org/nsfw/interaction?type=handjob');
       if (!response.ok) {
         throw new Error('Error en la respuesta de la API');
       }

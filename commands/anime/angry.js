@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { error: cajaError } = require('../../lib/estilo');
 
 // Lista de interacciones soportadas por la API
@@ -40,8 +41,8 @@ module.exports = interacciones.map(item => ({
       }
 
       // Llamada a la API de Evogb
-      const apiUrl = `https://api.evogb.org/sfw/interaction?type=${item.name}&key=evogb-WPHlBOdu`;
-      const res = await fetch(apiUrl);
+      const apiUrl = `https://api.evogb.org/sfw/interaction?type=${item.name}`;
+      const res = await fetchEvogb(apiUrl);
 
       if (!res.ok) {
         throw new Error(`Estado HTTP: ${res.status}`);

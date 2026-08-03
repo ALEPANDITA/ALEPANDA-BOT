@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
@@ -22,7 +23,7 @@ module.exports = {
         mentions = [sender];
       }
 
-      const res = await fetch('https://api.evogb.org/sfw/interaction?type=curious&key=evogb-WPHlBOdu');
+      const res = await fetchEvogb('https://api.evogb.org/sfw/interaction?type=curious');
       if (!res.ok) throw new Error('Error en la API');
       
       const data = await res.json();

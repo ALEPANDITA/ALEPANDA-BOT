@@ -1,5 +1,5 @@
 const { advertencia, error: cajaError } = require('../../lib/estilo');
-const { getApiKey } = require('../../lib/apikeys');
+const { fetchEvogb } = require('../../lib/evogb');
 
 module.exports = {
   name: 'xvideos',
@@ -13,14 +13,8 @@ module.exports = {
     }
 
     try {
-      let apiKey = 'evogb-WPHlBOdu';
-      try {
-        const customKey = getApiKey('evogb');
-        if (customKey) apiKey = customKey;
-      } catch (e) {}
-
-      const apiUrl = `https://api.evogb.org/nsfw/search/xvideos?query=${encodeURIComponent(query)}&key=${apiKey}`;
-      const response = await fetch(apiUrl);
+      const apiUrl = `https://api.evogb.org/nsfw/search/xvideos?query=${encodeURIComponent(query)}`;
+      const response = await fetchEvogb(apiUrl);
       const data = await response.json();
 
       if (!data || !data.status || !data.resultados || data.resultados.length === 0) {

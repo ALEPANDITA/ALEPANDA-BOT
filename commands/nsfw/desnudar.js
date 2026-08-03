@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
@@ -11,7 +12,7 @@ module.exports = {
     const target = mentionedJid.length > 0 ? mentionedJid[0] : sender;
 
     try {
-      const apiRes = await fetch('https://api.evogb.org/nsfw/interaction?type=undress&key=evogb-WPHlBOdu');
+      const apiRes = await fetchEvogb('https://api.evogb.org/nsfw/interaction?type=undress');
       const data = await apiRes.json();
 
       if (!data || !data.status || !data.result) {

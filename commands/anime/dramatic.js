@@ -1,3 +1,4 @@
+const { fetchEvogb } = require('../../lib/evogb');
 const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
@@ -10,7 +11,7 @@ module.exports = {
       const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
       const sender = msg.key.participant || msg.key.remoteJid;
 
-      const res = await fetch('https://api.evogb.org/sfw/interaction?type=dramatic&key=evogb-WPHlBOdu');
+      const res = await fetchEvogb('https://api.evogb.org/sfw/interaction?type=dramatic');
       const data = await res.json();
 
       if (!data || !data.status || !data.result) {
