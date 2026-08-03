@@ -6,6 +6,7 @@ const { esOwnerBot } = require('../../lib/permisos');
 const { advertencia, exito, error: cajaError, caja } = require('../../lib/estilo');
 const { generarTexto } = require('../../lib/gemini');
 const { construirPromptArreglo, limpiarCodigo } = require('../../lib/crearcmd-ia');
+const { diagnosticarComando } = require('../../lib/diagnostico-red');
 const { guardarEstado } = require('../../lib/crearcmd-estado');
 
 const CARPETA_COMANDOS = path.join(__dirname, '..', '..', 'commands');
@@ -53,15 +54,16 @@ module.exports = {
 
     const partes = texto.trim().split(/\s+/);
     const nombrePedido = partes[1];
-    const descripcionProblema = partes.slice(2).join(' ').trim();
+    const descripcionProblema = partes.slice(2).join(' ').trim() || '(el owner no dio detalles adicionales, basate solo en el diagnostico en vivo de abajo para decidir que corregir)';
 
-    if (!nombrePedido || !descripcionProblema) {
+    if (!nombrePedido) {
       return sock.sendMessage(jid, {
         text: caja(
           [
-            `Uso: ${prefix}arreglarcmd <nombre del comando> <que esta mal, incluye el endpoint si cambio>`,
+            `Uso: ${prefix}arreglarcmd <nombre del comando> [que esta mal, opcional si quieres que primero pruebe solo]`,
             '',
-            `Ejemplo: ${prefix}arreglarcmd pindl ya no descarga, el endpoint ahora responde asi: {"link":"..."}`
+            `Ejemplo: ${prefix}arreglarcmd pindl ya no descarga, el endpoint ahora responde asi: {"link":"..."}`,
+            `Ejemplo sin descripcion: ${prefix}arreglarcmd pindl  (corre el diagnostico en vivo primero y decide con eso)`
           ],
           { titulo: 'ARREGLARCMD', estilo: 'neon' }
         )
@@ -85,12 +87,20 @@ module.exports = {
     const rutaOriginal = comando._rutaArchivo;
     const codigoActual = fs.readFileSync(rutaOriginal, 'utf-8');
 
+    await sock.sendMessage(jid, { text: `🔎 Probando en vivo las URLs que usa "${comando.name}"...` }, { quoted: msg });
+
+    const diagnostico = await diagnosticarComando(codigoActual);
+
+    await sock.sendMessage(jid, {
+      text: caja([diagnostico.resumenTexto], { titulo: 'DIAGNOSTICO EN VIVO', estilo: 'neon' })
+    });
+
     await sock.sendMessage(jid, { text: `🛠️ Revisando "${comando.name}" con IA...` }, { quoted: msg });
 
     const prompt = construirPromptArreglo({
       descripcionOriginal: `Comando existente llamado "${comando.name}" (categoria: ${comando.category || 'general'}). Descripcion original: ${comando.description || '(sin descripcion)'}`,
       codigoAnterior: codigoActual,
-      errorAnterior: '(sin error previo registrado, el owner solo describe el problema abajo)',
+      errorAnterior: `Diagnostico en vivo (URLs probadas justo ahora contra el servidor real):\n${diagnostico.resumenTexto}`,
       aclaracionUsuario: descripcionProblema
     });
 
