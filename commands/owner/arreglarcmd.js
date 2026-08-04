@@ -42,9 +42,9 @@ function validarEnProcesoAparte(rutaArchivo) {
 
 module.exports = {
   name: 'arreglarcmd',
-  aliases: ['repararcmd', 'fixcmd'],
+  aliases: ['fixcmd'],
   category: 'owner',
-  description: 'Repara un comando YA EXISTENTE (lo haya creado crearcmd o no) usando IA + tu descripcion del problema. Uso: .arreglarcmd <nombre> <que esta mal>. Solo owner.',
+  description: 'Repara UN SOLO comando YA EXISTENTE por nombre (lo haya creado crearcmd o no) usando IA + tu descripcion del problema. Para arreglar TODA una categoria de un jalon usa .repararcmd <categoria> en su lugar. Uso: .arreglarcmd <nombre> <que esta mal>. Solo owner.',
   execute: async (sock, jid, msg, { prefix, texto, comandos }) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -157,7 +157,6 @@ module.exports = {
       delete require.cache[require.resolve(rutaOriginal)];
       modulo = require(rutaOriginal);
     } catch (err) {
-      // Revertimos al respaldo si ni siquiera carga.
       fs.copyFileSync(rutaRespaldo, rutaOriginal);
       delete require.cache[require.resolve(rutaOriginal)];
       guardarEstado(jid, {
