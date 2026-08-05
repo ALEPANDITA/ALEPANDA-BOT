@@ -2,6 +2,21 @@ const { buscarYoutubeVarios, limpiarTexto } = require('../../../lib/dvyerapi');
 const { guardarBusqueda } = require('../../../lib/busquedas');
 const { generateWAMessageFromContent, generateWAMessage, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
 
+// Se pide un "pool" mas grande de resultados de los que se muestran, y de
+// ahi se elige un subconjunto al azar cada vez. Asi, si repites el mismo
+// .ytsearch, no siempre salen exactamente los mismos videos en el mismo orden.
+const TAMANO_POOL = 20;
+const CANTIDAD_A_MOSTRAR = 10;
+
+function mezclarArray(arr) {
+  const copia = [...arr];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia;
+}
+
 function formatearDuracion(segundos = 0) {
   const sec = Number(segundos) || 0;
   const min = Math.floor(sec / 60);
@@ -183,14 +198,14 @@ module.exports = {
     let errorApiKey = null;
 
     try {
-      videos = await buscarConLibreria(query, 5);
+      videos = await buscarConLibreria(query, TAMANO_POOL);
     } catch (err) {
       console.warn('[ytsearch] yt-search fallo, probando API DVYER de respaldo. Detalle:', err.message);
     }
 
     if (!videos.length) {
       try {
-        videos = await buscarYoutubeVarios(query, 5);
+        videos = await buscarYoutubeVarios(query, TAMANO_POOL);
       } catch (err) {
         if (err.code === 'NO_API_KEY') errorApiKey = err.message;
         console.warn('[ytsearch] API DVYER tambien fallo, probando Invidious. Detalle:', err.message);
@@ -199,7 +214,7 @@ module.exports = {
 
     if (!videos.length) {
       try {
-        videos = await buscarConInvidious(query, 5);
+        videos = await buscarConInvidious(query, TAMANO_POOL);
       } catch (err) {
         console.error('[ytsearch]', err);
         return sock.sendMessage(jid, {
@@ -211,6 +226,8 @@ module.exports = {
     if (!videos.length) {
       return sock.sendMessage(jid, { text: 'No se encontraron resultados.' });
     }
+
+    videos = mezclarArray(videos).slice(0, CANTIDAD_A_MOSTRAR);
 
     guardarBusqueda(jid, videos);
 
