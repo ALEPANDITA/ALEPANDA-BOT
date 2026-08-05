@@ -31,12 +31,29 @@ function formatearVistas(numero = 0) {
   return n.toString();
 }
 
-const TIMEOUT_MEDIA_MS = 12000;
+const TIMEOUT_MEDIA_MS = 7000;
 function conTimeout(promesa, ms, mensajeError) {
   return Promise.race([
     promesa,
     new Promise((_, reject) => setTimeout(() => reject(new Error(mensajeError)), ms))
   ]);
+}
+
+// Cache en memoria de miniaturas ya subidas a los servidores de WhatsApp.
+// Si el mismo video vuelve a salir en otra busqueda (comun, sobre todo con
+// canciones/artistas populares), se reusa la subida en vez de volver a
+// descargar y re-subir la imagen. Se limpia sola cada 10 minutos.
+const CACHE_MEDIA_TTL_MS = 10 * 60 * 1000;
+const cacheMediaPreparada = new Map();
+
+async function prepararMediaConCache(sock, url) {
+  const cacheado = cacheMediaPreparada.get(url);
+  if (cacheado && (Date.now() - cacheado.ts) < CACHE_MEDIA_TTL_MS) {
+    return cacheado.data;
+  }
+  const data = await prepareWAMessageMedia({ image: { url } }, { upload: sock.waUploadToServer });
+  cacheMediaPreparada.set(url, { data, ts: Date.now() });
+  return data;
 }
 
 // Intenta primero con la libreria yt-search (busqueda directa, sin depender
@@ -124,7 +141,7 @@ async function intentarCarrusel(sock, jid, msg, query, videos, prefix) {
       let img = null;
       try {
         img = await conTimeout(
-          prepareWAMessageMedia({ image: { url: v.thumbnail } }, { upload: sock.waUploadToServer }),
+          prepararMediaConCache(sock, v.thumbnail),
           TIMEOUT_MEDIA_MS,
           `Timeout preparando miniatura de la tarjeta ${i + 1}`
         );
@@ -194,11 +211,13 @@ module.exports = {
       return sock.sendMessage(jid, { text: `Uso: ${prefix}ytsearch <busqueda>` });
     }
 
+    await sock.sendMessage(jid, { text: `🔎 Buscando *${query}* en YouTube...` }, { quoted: msg });
+
     let videos = [];
     let errorApiKey = null;
 
     try {
-      videos = await buscarConLibreria(query, TAMANO_POOL);
+      videos = await conTimeout(buscarConLibreria(query, TAMANO_POOL), 8000, 'Timeout en yt-search');
     } catch (err) {
       console.warn('[ytsearch] yt-search fallo, probando API DVYER de respaldo. Detalle:', err.message);
     }
@@ -227,12 +246,15 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'No se encontraron resultados.' });
     }
 
+    // De todo el pool encontrado, se elige al azar la cantidad a mostrar,
+    // para que repetir el mismo .ytsearch no siempre traiga exactamente lo mismo.
     videos = mezclarArray(videos).slice(0, CANTIDAD_A_MOSTRAR);
 
     guardarBusqueda(jid, videos);
 
-    // Intento experimental de carrusel con el fork Edward-oficial/bails.
-    // No bloquea ni reemplaza el resto del flujo (ver nota arriba de la funcion).
+    // Carrusel deslizable (fork Edward-oficial/bails). Si se manda bien,
+    // este es el UNICO mensaje que se envia (no se duplica con texto/miniaturas/botones).
+    // Solo si falla, se usa el flujo de respaldo de siempre (texto + miniaturas + botones).
     const carruselEnviado = await intentarCarrusel(sock, jid, msg, query, videos, prefix);
     if (carruselEnviado) return;
 
