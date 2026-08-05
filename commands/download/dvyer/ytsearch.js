@@ -6,7 +6,7 @@ const { generateWAMessageFromContent, generateWAMessage, prepareWAMessageMedia, 
 // ahi se elige un subconjunto al azar cada vez. Asi, si repites el mismo
 // .ytsearch, no siempre salen exactamente los mismos videos en el mismo orden.
 const TAMANO_POOL = 20;
-const CANTIDAD_A_MOSTRAR = 10;
+const CANTIDAD_A_MOSTRAR = 8;
 
 function mezclarArray(arr) {
   const copia = [...arr];

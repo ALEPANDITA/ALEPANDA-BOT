@@ -1,5 +1,4 @@
-const fs = require('fs');
-const { resolverEntrada, obtenerDatosDescarga, descargarArchivo, limpiarTexto } = require('../../../lib/dvyerapi');
+const { resolverEntrada, obtenerDatosDescarga, descargarBuffer, limpiarTexto } = require('../../../lib/dvyerapi');
 const { obtenerBusqueda } = require('../../../lib/busquedas');
 const { cargando, advertencia, error: cajaError } = require('../../../lib/estilo');
 
@@ -17,7 +16,6 @@ module.exports = {
       });
     }
 
-    let tempPath;
     try {
       let resuelto;
 
@@ -45,9 +43,7 @@ module.exports = {
       }
 
       const datos = await obtenerDatosDescarga('ytmp3', resuelto.url);
-      tempPath = await descargarArchivo(datos.remoteUrl, 'm4a');
-
-      const buffer = fs.readFileSync(tempPath);
+      const buffer = await descargarBuffer(datos.remoteUrl);
       const titulo = datos.title || resuelto.title || 'YouTube M4A';
 
       await sock.sendMessage(jid, {
@@ -61,8 +57,6 @@ module.exports = {
         ? err.message
         : `No se pudo descargar el audio: ${err.message}`;
       await sock.sendMessage(jid, { text: cajaError(textoError) });
-    } finally {
-      if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     }
   }
 };
