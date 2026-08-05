@@ -285,31 +285,37 @@ module.exports = {
       }
     }
 
+    // Botones nativos reales de descarga (MP3/MP4) por resultado.
+    // La lista/botones normales de Baileys (sock.sendMessage con "sections" o
+    // "buttons") estan rotos en la libreria oficial actual: le faltan unos
+    // "nodos binarios" internos que WhatsApp exige para que se vean. En vez de
+    // cambiar de libreria entera (riesgo alto, ver conversacion), usamos
+    // baileys_helper: un paquete pequeño y ya revisado que SOLO agrega esa
+    // pieza faltante, sin tocar ni reemplazar la libreria oficial.
+    //
+    // Limitamos a los primeros 5 resultados (10 botones) para no saturar el
+    // mensaje; el resto se puede pedir igual escribiendo .ytmp3/.ytmp4 <numero>.
     try {
-      await sock.sendMessage(jid, {
-        text: 'Tambien puedes elegir aqui abajo 👇',
+      const { sendButtons } = require('baileys_helper');
+      const limite = Math.min(videos.length, 5);
+      const botones = [];
+      for (let i = 0; i < limite; i++) {
+        botones.push({ name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: `🎵 MP3 #${i + 1}`, id: `${prefix}ytmp3 ${i + 1}` }) });
+        botones.push({ name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: `🎬 MP4 #${i + 1}`, id: `${prefix}ytmp4 ${i + 1}` }) });
+      }
+
+      await sendButtons(sock, jid, {
+        text: `Toca un boton para descargar (resultados 1-${limite}).${videos.length > limite ? `\nPara los demas, escribe ${prefix}ytmp3 <numero> o ${prefix}ytmp4 <numero>.` : ''}`,
         footer: 'ALEPANDA BOT',
-        title: 'Descargar un resultado',
-        buttonText: 'Ver opciones',
-        sections: [
-          {
-            title: '🎵 Descargar audio (MP3)',
-            rows: videos.map((v, i) => ({
-              title: `${i + 1}. ${acortar(v.title)}`,
-              rowId: `${prefix}ytmp3 ${i + 1}`
-            }))
-          },
-          {
-            title: '🎬 Descargar video (MP4)',
-            rows: videos.map((v, i) => ({
-              title: `${i + 1}. ${acortar(v.title)}`,
-              rowId: `${prefix}ytmp4 ${i + 1}`
-            }))
-          }
-        ]
+        buttons: botones
       });
+
+      console.log('[ytsearch] Botones nativos (baileys_helper) enviados.');
     } catch (err) {
-      console.warn('[ytsearch] la lista interactiva no se pudo enviar (el cliente de quien la recibe puede no soportarla):', err.message);
+      console.warn('[ytsearch] No se pudieron mandar los botones nativos, usa los comandos .ytmp3/.ytmp4 manuales. Detalle:', err.message);
+      await sock.sendMessage(jid, {
+        text: `Para descargar, escribe ${prefix}ytmp3 <numero> o ${prefix}ytmp4 <numero> segun el resultado que quieras.`
+      });
     }
   }
 };
