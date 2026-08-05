@@ -216,7 +216,8 @@ module.exports = {
 
     // Intento experimental de carrusel con el fork Edward-oficial/bails.
     // No bloquea ni reemplaza el resto del flujo (ver nota arriba de la funcion).
-    await intentarCarrusel(sock, jid, msg, query, videos, prefix);
+    const carruselEnviado = await intentarCarrusel(sock, jid, msg, query, videos, prefix);
+    if (carruselEnviado) return;
 
     const acortar = (t) => (t.length > 55 ? t.slice(0, 52) + '...' : t);
 
