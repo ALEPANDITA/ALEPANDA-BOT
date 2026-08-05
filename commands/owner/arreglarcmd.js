@@ -10,7 +10,6 @@ const { diagnosticarComando } = require('../../lib/diagnostico-red');
 const { guardarEstado } = require('../../lib/crearcmd-estado');
 
 const CARPETA_COMANDOS = path.join(__dirname, '..', '..', 'commands');
-const CARPETA_STAGING = path.join(CARPETA_COMANDOS, '_staging');
 const RUTA_RUNNER = path.join(__dirname, '..', '..', 'lib', 'addcmd-runner.js');
 
 function normalizar(texto) {
@@ -120,8 +119,12 @@ module.exports = {
       return sock.sendMessage(jid, { text: cajaError('La IA no devolvio ningun codigo utilizable. Intenta describir el problema con mas detalle.') });
     }
 
-    if (!fs.existsSync(CARPETA_STAGING)) fs.mkdirSync(CARPETA_STAGING, { recursive: true });
-    const rutaStaging = path.join(CARPETA_STAGING, `fix_${Date.now()}.js`);
+    // Se valida en la MISMA carpeta que el archivo original (no en _staging),
+    // porque algunos comandos viven mas anidados que otros (ej. commands/download/dvyer/*.js
+    // usa ../../../lib/... en vez de ../../lib/...). Si se valida en otra profundidad,
+    // esos require() relativos calculan mal y truena aunque el codigo este bien.
+    const carpetaOriginal = path.dirname(rutaOriginal);
+    const rutaStaging = path.join(carpetaOriginal, `.fix_${Date.now()}.js`);
     fs.writeFileSync(rutaStaging, codigoNuevo);
 
     const resultado = await validarEnProcesoAparte(rutaStaging);
