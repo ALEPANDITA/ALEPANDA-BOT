@@ -104,7 +104,16 @@ async function startBot() {
   console.log('🌐 Version de WhatsApp Web obtenida:', version);
 
   let metodo = null;
-  const yaRegistrado = fs.existsSync(path.join(__dirname, 'auth_info', 'creds.json'));
+  let yaRegistrado = false;
+  try {
+    const credsPath = path.join(__dirname, 'auth_info', 'creds.json');
+    if (fs.existsSync(credsPath)) {
+      const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+      yaRegistrado = credsData.registered === true;
+    }
+  } catch (e) {
+    yaRegistrado = false;
+  }
 
   if (!yaRegistrado) {
     if (process.stdout.isTTY) {
