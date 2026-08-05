@@ -1,6 +1,6 @@
 const { buscarYoutubeVarios, limpiarTexto } = require('../../../lib/dvyerapi');
 const { guardarBusqueda } = require('../../../lib/busquedas');
-const { generateWAMessageFromContent, generateWAMessage, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, generateWAMessage, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
 
 function formatearDuracion(segundos = 0) {
   const sec = Number(segundos) || 0;
@@ -85,6 +85,89 @@ async function buscarConInvidious(query, limit) {
   throw ultimoError || new Error('Todas las instancias de Invidious fallaron.');
 }
 
+// === INTENTO DE CARRUSEL (fork Edward-oficial/bails) ===
+// NOTA: en la version anterior de este archivo, con la libreria oficial
+// @whiskeysockets/baileys, se probo un carrusel similar y se quito porque
+// Baileys reportaba el envio como exitoso pero WhatsApp nunca lo entregaba
+// en NINGUN cliente. Este bloque prueba lo mismo pero con el fork
+// Edward-oficial/bails, que trae su propia implementacion de
+// proto.Message.InteractiveMessage.CarouselMessage. No hay garantia de que
+// funcione mejor -- es un experimento. Por eso NO se quita el flujo de
+// siempre (texto + miniaturas + botones) despues de esto: si el carrusel
+// no se ve, el resto del mensaje sigue llegando igual que antes.
+async function intentarCarrusel(sock, jid, msg, query, videos, prefix) {
+  if (!proto?.Message?.InteractiveMessage?.CarouselMessage) {
+    console.warn('[ytsearch] Este fork de Baileys no expone CarouselMessage, se omite el intento de carrusel.');
+    return false;
+  }
+
+  try {
+    const conMiniatura = videos.filter(v => v.thumbnail);
+    if (!conMiniatura.length) return false;
+
+    const cards = await Promise.all(conMiniatura.map(async (v, i) => {
+      let img = null;
+      try {
+        img = await conTimeout(
+          prepareWAMessageMedia({ image: { url: v.thumbnail } }, { upload: sock.waUploadToServer }),
+          TIMEOUT_MEDIA_MS,
+          `Timeout preparando miniatura de la tarjeta ${i + 1}`
+        );
+      } catch (e) {
+        console.warn(`[ytsearch][carrusel] no se pudo preparar la miniatura ${i + 1}:`, e.message);
+      }
+
+      return {
+        header: proto.Message.InteractiveMessage.Header.fromObject({
+          title: v.title.length > 60 ? v.title.slice(0, 57) + '...' : v.title,
+          hasMediaAttachment: !!img,
+          imageMessage: img?.imageMessage || null
+        }),
+        body: proto.Message.InteractiveMessage.Body.fromObject({
+          text: `Canal: ${v.author || 'Desconocido'}\nDuracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}`
+        }),
+        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+          buttons: [
+            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎵 MP3', id: `${prefix}ytmp3 ${i + 1}` }) },
+            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎬 MP4', id: `${prefix}ytmp4 ${i + 1}` }) }
+          ]
+        })
+      };
+    }));
+
+    const interactiveMessage = proto.Message.InteractiveMessage.create({
+      body: proto.Message.InteractiveMessage.Body.fromObject({
+        text: `🌸 Resultados para: *${query}* (desliza para ver mas)`
+      }),
+      footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: 'ALEPANDA BOT' }),
+      header: proto.Message.InteractiveMessage.Header.fromObject({
+        title: 'YouTube',
+        subtitle: query,
+        hasMediaAttachment: false
+      }),
+      carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({ cards })
+    });
+
+    const contenido = proto.Message.fromObject({
+      viewOnceMessage: {
+        message: {
+          messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+          interactiveMessage
+        }
+      }
+    });
+
+    const mensajeCarrusel = generateWAMessageFromContent(jid, contenido, { quoted: msg });
+    await sock.relayMessage(jid, mensajeCarrusel.message, { messageId: mensajeCarrusel.key.id });
+
+    console.log('[ytsearch] Carrusel enviado (sin error de Baileys -- revisa manualmente si se vio bien en el telefono).');
+    return true;
+  } catch (err) {
+    console.warn('[ytsearch] El intento de carrusel fallo con error real:', err.message);
+    return false;
+  }
+}
+
 module.exports = {
   name: 'ytsearch',
   category: 'download',
@@ -131,15 +214,12 @@ module.exports = {
 
     guardarBusqueda(jid, videos);
 
+    // Intento experimental de carrusel con el fork Edward-oficial/bails.
+    // No bloquea ni reemplaza el resto del flujo (ver nota arriba de la funcion).
+    await intentarCarrusel(sock, jid, msg, query, videos, prefix);
+
     const acortar = (t) => (t.length > 55 ? t.slice(0, 52) + '...' : t);
 
-    // NOTA: se elimino el intento de "carrusel deslizable" que estaba aqui.
-    // Confirmado en pruebas reales: Baileys reporta el envio como exitoso
-    // (no lanza ningun error), pero WhatsApp nunca lo entrega en NINGUN
-    // cliente (ni celular ni WhatsApp Web/Desktop). Ademas, tenia un
-    // "return" que bloqueaba que se llegara a mandar los botones nativos
-    // de aqui abajo. Se deja unicamente el metodo confiable: texto + album/
-    // miniaturas + botones nativos reales (via baileys_helper).
     const listado = videos.map((v, i) =>
       `*${i + 1}. ${v.title}*\n` +
       `Canal: ${v.author || 'Desconocido'} | Duracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}\n` +
