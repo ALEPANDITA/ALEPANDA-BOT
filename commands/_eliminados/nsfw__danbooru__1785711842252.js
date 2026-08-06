@@ -1,13 +1,22 @@
 const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
-  name: 'flat_chest',
-  aliases: ['flat', 'chest', 'danbooruflat', 'nsfwflatchest'],
+  name: 'danbooru',
+  aliases: ['nsfwdanbooru', 'danboorusearch'],
   category: 'nsfw',
-  description: 'Busca y envia imagenes de Danbooru (categoria flat_chest). Uso: .flat_chest (Aliases: .flat, .chest, .danbooruflat, .nsfwflatchest)',
-  execute: async (sock, jid, msg, { prefix }) => {
+  description: 'Busca y envia imagenes de Danbooru (ej: .danbooru <keyword>)',
+  execute: async (sock, jid, msg, { texto, prefix }) => {
+    const args = texto.trim().split(/\s+/).slice(1);
+    const keyword = args.join(' ').trim();
+
+    if (!keyword) {
+      return sock.sendMessage(jid, { 
+        text: advertencia(`Uso correcto: ${prefix}danbooru <keyword>\nEjemplo: ${prefix}danbooru catgirl`, { titulo: 'FALTA INFORMACION' }) 
+      });
+    }
+
     try {
-      const apiUrl = 'https://api.evogb.org/nsfw/danbooru?keyword=flat_chest&key=evogb-WPHlBOdu';
+      const apiUrl = `https://api.evogb.org/nsfw/danbooru?keyword=${encodeURIComponent(keyword)}&key=evogb-WPHlBOdu`;
       const response = await fetch(apiUrl);
       
       if (!response.ok) {
@@ -17,7 +26,7 @@ module.exports = {
       const data = await response.json();
 
       if (!data.status || !Array.isArray(data.results) || data.results.length === 0) {
-        return sock.sendMessage(jid, { text: cajaError('No se encontraron resultados en la API.') });
+        return sock.sendMessage(jid, { text: cajaError('No se encontraron resultados para la búsqueda proporcionada.') });
       }
 
       // Seleccionar una imagen aleatoria de los resultados
@@ -32,13 +41,13 @@ module.exports = {
 
       await sock.sendMessage(jid, {
         image: { url: randomImage },
-        caption: `🔥 Contenido solicitado por: @${senderJid.split('@')[0]}`,
+        caption: `Resultado para: *${keyword}*\nPedido por: @${senderJid.split('@')[0]}`,
         mentions: [senderJid]
-      }, { quoted: msg });
+      });
 
     } catch (err) {
       console.error(err);
-      await sock.sendMessage(jid, { text: cajaError('Ocurrió un error al procesar la solicitud: ' + err.message) });
+      await sock.sendMessage(jid, { text: cajaError('Ocurrió un error al procesar la solicitud de Danbooru: ' + err.message) });
     }
   }
 };

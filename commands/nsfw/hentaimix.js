@@ -6,21 +6,41 @@ module.exports = {
   description: 'Envia una imagen hentai aleatoria. Uso: .hentai',
   execute: async (sock, jid, msg, { prefix, texto }) => {
     try {
-      const res = await fetch('https://api.evogb.org/nsfw/random/hentai');
-      if (!res.ok) {
-        return sock.sendMessage(jid, { text: cajaError('No se pudo conectar a la API de hentai.') });
+      // Usamos una API alternativa y publica de respaldo para contenido nsfw/anime
+      const apis = [
+        'https://nekos.moe/api/v1/random/image?nsfw=true',
+        'https://api.waifu.pics/nsfw/waifu'
+      ];
+
+      let imageUrl = null;
+
+      for (const apiUrl of apis) {
+        try {
+          const res = await fetch(apiUrl);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.images && data.images[0] && data.images[0].id) {
+              imageUrl = `https://nekos.moe/image/${data.images[0].id}`;
+              break;
+            } else if (data.url) {
+              imageUrl = data.url;
+              break;
+            }
+          }
+        } catch (e) {
+          // Intentar con la siguiente API si falla
+          continue;
+        }
       }
-      const data = await res.json();
-      if (!data.status) {
-        return sock.sendMessage(jid, { text: cajaError('No se encontró contenido hentai.') });
+
+      if (!imageUrl) {
+        return sock.sendMessage(jid, { text: cajaError('No se pudo conectar a ninguna API disponible para hentai.') });
       }
-      if (!data.data || !data.data.url) {
-        return sock.sendMessage(jid, { text: cajaError('La API de hentai no proporcionó una URL válida.') });
-      }
-      await sock.sendMessage(jid, { image: { url: data.data.url } });
+
+      await sock.sendMessage(jid, { image: { url: imageUrl } });
     } catch (err) {
       console.error(err);
-      await sock.sendMessage(jid, { text: cajaError('Ocurrio un error al descargar la imagen hentai: ' + err.message) });
+      await sock.sendMessage(jid, { text: cajaError('Ocurrio un error al obtener la imagen hentai: ' + err.message) });
     }
   }
 };

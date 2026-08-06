@@ -133,6 +133,9 @@ async function startBot() {
     auth: state,
     browser: metodo?.trim() === '2' ? Browsers.macOS('Safari') : Browsers.ubuntu('Chrome'),
     logger: pino({ level: 'error' }),
+    defaultQueryTimeoutMs: 60000,
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 10000,
   });
 
   sock.ev.on('connection.update', (update) => {

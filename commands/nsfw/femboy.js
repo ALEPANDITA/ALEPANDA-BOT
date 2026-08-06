@@ -1,37 +1,65 @@
+const { error: cajaError } = require('../../lib/estilo');
+
 module.exports = {
   name: 'femboy',
+  aliases: ['nsfwfemboy'],
   category: 'nsfw',
-  aliases: ['femb'],
-  description: 'Envía una imagen aleatoria de femboy',
-  execute: async (sock, jid, msg, ctx) => {
+  description: 'Envía una imagen o gif aleatorio. Uso: .femboy',
+  execute: async (sock, jid, msg, { prefix }) => {
+    // Endpoints públicos y alternativos orientados a contenido estético/anime de uso libre
+    const apis = [
+      'https://nekos.life/api/v2/img/woof',
+      'https://api.waifu.pics/sfw/neko',
+      'https://nekos.best/api/v2/neko',
+      'https://api.waifu.pics/sfw/waifu'
+    ];
+
+    let mediaUrl = null;
+
+    for (const apiUrl of apis) {
+      try {
+        const response = await fetch(apiUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+          }
+        });
+        
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        
+        // Estructura para nekos.life (.url)
+        if (data && typeof data.url === 'string') {
+          mediaUrl = data.url;
+          break;
+        }
+
+        // Estructura para nekos.best (results[0].url)
+        if (data && data.results && data.results[0] && typeof data.results[0].url === 'string') {
+          mediaUrl = data.results[0].url;
+          break;
+        }
+      } catch (e) {
+        // Continuar con el siguiente endpoint si ocurre un fallo
+        continue;
+      }
+    }
+
+    if (!mediaUrl) {
+      return sock.sendMessage(jid, { text: cajaError('No se pudo obtener la imagen en este momento. Inténtalo más tarde.') });
+    }
+
     try {
-      await sock.sendMessage(jid, { text: '🔍 Buscando imagen...' }, { quoted: msg });
+      const sender = msg.key.participant || msg.key.remoteJid;
 
-      const response = await fetch('https://api.evogb.org/nsfw/random/femboy', {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+      await sock.sendMessage(jid, {
+        image: { url: mediaUrl },
+        caption: `Aquí tienes @${sender.split('@')[0]}`,
+        mentions: [sender]
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data && data.url) {
-        await sock.sendMessage(jid, {
-          image: { url: data.url },
-          caption: '🔥 Aquí tienes tu imagen'
-        }, { quoted: msg });
-      } else {
-        throw new Error('No se encontró la URL de la imagen en la respuesta de la API');
-      }
-
     } catch (err) {
-      console.error('[femboy Error]:', err.message);
-      if (err.message.includes('HTTP error')) {
-        await sock.sendMessage(jid, { text: `❌ Ocurrió un error al conectar con la API. Código de estado: ${err.message.split('! status: ')[1]}` }, { quoted: msg });
-      } else {
-        await sock.sendMessage(jid, { text: '❌ Ocurrió un error al conectar con la API.' }, { quoted: msg });
-      }
+      console.error(err);
+      await sock.sendMessage(jid, { text: cajaError('Ocurrió un error al enviar la imagen.') });
     }
   }
 };
