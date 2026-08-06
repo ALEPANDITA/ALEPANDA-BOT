@@ -243,19 +243,44 @@ async function startBot() {
       metadata.participants = metadata.participants.filter(x => !idsQueSalen.includes(x.id));
     }
 
-    function resolverNumeroReal(participanteId) {
-      if (participanteId.endsWith('@s.whatsapp.net')) return participanteId.split('@')[0];
+    // WhatsApp ahora suele dar el ID del participante como "xxxxx@lid" (un
+    // identificador de privacidad) en vez del numero real "xxxxx@s.whatsapp.net".
+    // Antes, si no se lograba traducir el @lid a un numero real, se terminaba
+    // usando el propio @lid como si fuera un numero de telefono -- por eso
+    // salian "numeros random" en las menciones. Ahora: el JID que se usa para
+    // ETIQUETAR (mentions) siempre es el que WhatsApp realmente entrego
+    // (participanteId, sea @lid o @s.whatsapp.net), que es 100% valido porque
+    // es el identificador real de esa persona en el grupo. La traduccion a
+    // numero de telefono SOLO se usa para el texto visible, y si falla, no
+    // rompe nada -- simplemente el texto no muestra el numero.
+    async function resolverParticipante(participanteId, metadata, sock) {
+      if (participanteId.endsWith('@s.whatsapp.net')) {
+        return { numero: participanteId.split('@')[0], jidMencion: participanteId };
+      }
+
+      try {
+        const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(participanteId);
+        if (pn) {
+          const numeroReal = pn.split('@')[0].split(':')[0];
+          return { numero: numeroReal, jidMencion: `${numeroReal}@s.whatsapp.net` };
+        }
+      } catch (err) { /* este fork no soporta el mapeo, seguimos con el respaldo */ }
+
       const info = metadata.participants.find(p => p.id === participanteId || p.lid === participanteId);
-      const real = info?.phoneNumber || info?.id;
-      return real ? real.split('@')[0] : participanteId.split('@')[0];
+      if (info?.phoneNumber) {
+        const numeroReal = info.phoneNumber.split('@')[0];
+        return { numero: numeroReal, jidMencion: `${numeroReal}@s.whatsapp.net` };
+      }
+
+      return { numero: `lid-${participanteId.split('@')[0]}`, jidMencion: participanteId };
     }
 
     async function procesarParticipante(participante) {
       const participanteId = typeof participante === 'string' ? participante : participante.id;
-      const numero = resolverNumeroReal(participanteId);
-      const jidReal = `${numero}@s.whatsapp.net`;
+      const { numero, jidMencion } = await resolverParticipante(participanteId, metadata, sock);
+      const jidReal = jidMencion;
 
-      if (action === 'add' && grupo.antifake) {
+      if (action === 'add' && grupo.antifake && !numero.startsWith('lid-')) {
         const codigos = grupo.paisesPermitidos || ['52', '51'];
         const permitido = codigos.some(c => numero.startsWith(c));
         if (!permitido) {
