@@ -23,7 +23,7 @@ async function cambiarMute(sock, jid, msg, accion) {
   guardarDB(db);
 
   const texto = accion === 'mute' ? 'Usuario muteado. Sus mensajes seran borrados.' : 'Usuario desmuteado.';
-  await sock.sendMessage(jid, { text });
+  await sock.sendMessage(jid, { text: texto });
 }
 
 module.exports = [
