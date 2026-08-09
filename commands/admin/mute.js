@@ -1,4 +1,5 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { resolverJidReal } = require('../../lib/identidad');
 
 async function cambiarMute(sock, jid, msg, accion) {
   const metadata = await sock.groupMetadata(jid);
@@ -11,11 +12,15 @@ async function cambiarMute(sock, jid, msg, accion) {
 
   const mencionado = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
   const citado = msg.message.extendedTextMessage?.contextInfo?.participant;
-  const objetivo = mencionado || citado;
+  const objetivoCrudo = mencionado || citado;
 
-  if (!objetivo) {
+  if (!objetivoCrudo) {
     return sock.sendMessage(jid, { text: 'Menciona a alguien o responde su mensaje con este comando.' });
   }
+
+  // Mismo identificador que usa el handler de mensajes para revisar el mute
+  // -- si no coinciden, el mute se guarda pero nunca se detecta despues.
+  const objetivo = await resolverJidReal(sock, objetivoCrudo, metadata);
 
   const db = leerDB();
   const usuario = getUsuario(db, objetivo);
