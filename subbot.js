@@ -146,7 +146,9 @@ async function iniciarSubbot() {
     printQRInTerminal: false,
     logger: pino({ level: 'silent' }),
     browser: Browsers.ubuntu('Chrome'),
-    defaultQueryTimeoutMs: undefined
+    defaultQueryTimeoutMs: 60000,
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 10000
   });
 
   let pidiendoCodigo = false;
