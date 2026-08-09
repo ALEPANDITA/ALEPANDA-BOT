@@ -10,7 +10,7 @@ const pino = require('pino');
 const { leerConfig } = require('./lib/config');
 const { esOwnerBot } = require('./lib/permisos');
 const { leerDB, getGrupo, getUsuario } = require('./lib/db');
-const { construirTexto, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura } = require('./lib/bienvenidapro');
+const { construirTexto, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura, conTimeout } = require('./lib/bienvenidapro');
 
 const fs = require('fs');
 const path = require('path');
@@ -133,9 +133,6 @@ async function startBot() {
     auth: state,
     browser: metodo?.trim() === '2' ? Browsers.macOS('Safari') : Browsers.ubuntu('Chrome'),
     logger: pino({ level: 'error' }),
-    defaultQueryTimeoutMs: 60000,
-    connectTimeoutMs: 60000,
-    keepAliveIntervalMs: 10000,
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -262,7 +259,11 @@ async function startBot() {
       }
 
       try {
-        const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(participanteId);
+        const pn = await conTimeout(
+          sock.signalRepository?.lidMapping?.getPNForLID?.(participanteId),
+          2000,
+          null
+        );
         if (pn) {
           const numeroReal = pn.split('@')[0].split(':')[0];
           return { numero: numeroReal, jidMencion: `${numeroReal}@s.whatsapp.net` };
@@ -282,6 +283,10 @@ async function startBot() {
       const participanteId = typeof participante === 'string' ? participante : participante.id;
       const { numero, jidMencion } = await resolverParticipante(participanteId, metadata, sock);
       const jidReal = jidMencion;
+      // Para la tarjeta de imagen, si no se pudo resolver un numero real
+      // (queda como "lid-xxxxx"), mejor no mostrar nada a que se vea un
+      // numero falso/confuso.
+      const numeroParaImagen = String(numero).startsWith('lid-') ? null : numero;
 
       if (action === 'add' && grupo.antifake && !numero.startsWith('lid-')) {
         const codigos = grupo.paisesPermitidos || ['52', '51'];
@@ -319,7 +324,7 @@ async function startBot() {
         const texto = construirTexto(plantilla, { numero, metadata, sock, prefix: config.prefix, nombreConocido });
         const fotoBuffer = grupo.welcomeMediaType === undefined ? await obtenerFotoPerfilSegura(sock, participanteId) : null;
         const { buffer, tipoMedia } = await obtenerMediaGuardada('welcome', jid, grupo, {
-          fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero, nombreConocido
+          fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
         await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
@@ -331,7 +336,7 @@ async function startBot() {
         const texto = construirTexto(plantilla, { numero, metadata, sock, prefix: config.prefix, nombreConocido });
         const fotoBuffer = grupo.byeMediaType === undefined ? await obtenerFotoPerfilSegura(sock, participanteId) : null;
         const { buffer, tipoMedia } = await obtenerMediaGuardada('bye', jid, grupo, {
-          fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero, nombreConocido
+          fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
         await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
@@ -495,8 +500,16 @@ async function startBot() {
     if (esGrupo) {
       const { guardarDB } = require('./lib/db');
       const { caja } = require('./lib/estilo');
+      const { resolverJidReal } = require('./lib/identidad');
       const db = leerDB();
-      const remitente = msg.key.participant;
+      const remitenteCrudo = msg.key.participant;
+      // Mismo motivo que en el handler de bienvenida/despedida: WhatsApp a
+      // veces reporta al mismo usuario con distinto JID (numero real vs
+      // @lid). Si usamos el JID crudo como llave de la base de datos, cosas
+      // como .mute pueden guardarse bajo una llave y buscarse bajo otra,
+      // fallando en silencio. Aqui siempre resolvemos al mismo identificador.
+      const metadataParaResolver = await obtenerMetadataCacheada(sock, jid).catch(() => null);
+      const remitente = await resolverJidReal(sock, remitenteCrudo, metadataParaResolver);
       const usuario = getUsuario(db, remitente);
       const grupo = getGrupo(db, jid);
 
