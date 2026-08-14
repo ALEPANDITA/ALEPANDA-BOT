@@ -18,6 +18,14 @@ const path = require('path');
 const CACHE_METADATA_TTL_MS = 5 * 60 * 1000;
 const cacheMetadataGrupos = new Map();
 
+// Guarda la referencia al interval de subastas para poder limpiar cualquier
+// instancia anterior antes de crear una nueva. Sin esto, cada reconexion del
+// bot (Bad MAC, caida de red, restart, etc.) crea OTRO interval mas corriendo
+// cada 30s para siempre, y cada uno hace una lectura completa de la base de
+// datos -- es la causa principal de que la RAM suba solo con el tiempo,
+// incluso sin que nadie use el bot.
+let intervaloSubastas = null;
+
 async function obtenerMetadataCacheada(sock, jid, forzar = false) {
   const cacheado = cacheMetadataGrupos.get(jid);
   if (!forzar && cacheado && (Date.now() - cacheado.ts) < CACHE_METADATA_TTL_MS) {
@@ -26,6 +34,21 @@ async function obtenerMetadataCacheada(sock, jid, forzar = false) {
   const data = await sock.groupMetadata(jid);
   cacheMetadataGrupos.set(jid, { data, ts: Date.now() });
   return data;
+}
+
+// Quita del cache las entradas ya vencidas (grupos que no se han vuelto a
+// consultar en un rato). Sin esto, el Map guarda una entrada por cada grupo
+// distinto donde el bot estuvo activo alguna vez, y nunca se reduce.
+function podarCacheMetadataGrupos() {
+  const ahora = Date.now();
+  let podados = 0;
+  for (const [jid, entrada] of cacheMetadataGrupos.entries()) {
+    if ((ahora - entrada.ts) >= CACHE_METADATA_TTL_MS) {
+      cacheMetadataGrupos.delete(jid);
+      podados++;
+    }
+  }
+  return podados;
 }
 
 const EMOJIS_POR_CATEGORIA = {
@@ -165,7 +188,9 @@ async function startBot() {
 
     if (connection === 'open') {
       console.log(chalk.green.bold('✅ Bot conectado correctamente (ETAPA 5 - COMPLETA)'));
-      setInterval(async () => {
+
+      if (intervaloSubastas) clearInterval(intervaloSubastas);
+      intervaloSubastas = setInterval(async () => {
         try {
           const { leerDB } = require('./lib/db');
           const { finalizarSubastasVencidas } = require('./lib/mercado');
@@ -177,6 +202,9 @@ async function startBot() {
           console.error('[subastas] Error revisando subastas vencidas:', err);
         }
       }, 30 * 1000);
+
+      const { iniciarMonitorMemoria } = require('./lib/memoria');
+      iniciarMonitorMemoria([podarCacheMetadataGrupos]);
     }
   });
 

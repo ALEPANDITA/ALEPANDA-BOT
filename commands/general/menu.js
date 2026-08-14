@@ -4,6 +4,34 @@ const path = require('path');
 
 const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
 const videoPath = path.join(__dirname, '..', '..', 'assets', 'menu.mp4');
+
+// Cache en memoria del buffer del menu (video o imagen), para no releer el
+// archivo del disco entero en CADA .menu que pidan. Se invalida solo si el
+// archivo cambia (por .setmenuvideo/.setmenuimg/.delmenuvideo/.delmenuimg),
+// comparando la fecha de modificacion, asi que sigue actualizandose bien.
+let cacheMenuMedia = null; // { tipo: 'video'|'imagen', buffer, mtimeMs, ruta }
+
+function obtenerBufferMenu() {
+  const rutaActual = fs.existsSync(videoPath) ? videoPath : (fs.existsSync(imagePath) ? imagePath : null);
+  if (!rutaActual) {
+    cacheMenuMedia = null;
+    return null;
+  }
+
+  const stat = fs.statSync(rutaActual);
+  if (cacheMenuMedia && cacheMenuMedia.ruta === rutaActual && cacheMenuMedia.mtimeMs === stat.mtimeMs) {
+    return cacheMenuMedia;
+  }
+
+  cacheMenuMedia = {
+    tipo: rutaActual === videoPath ? 'video' : 'imagen',
+    buffer: fs.readFileSync(rutaActual),
+    mtimeMs: stat.mtimeMs,
+    ruta: rutaActual
+  };
+  return cacheMenuMedia;
+}
+
 const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'owner', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'config', 'nsfw'];
 
 // Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
@@ -158,12 +186,11 @@ module.exports = {
     texto3 += `✧ Escribe el comando tal como aparece arriba (con el prefijo incluido).\n`;
     texto3 += `🐼 Con garra y sin miedo.`;
 
-    if (fs.existsSync(videoPath)) {
-      const buffer = fs.readFileSync(videoPath);
-      await sock.sendMessage(jid, { video: buffer, caption: texto3, gifPlayback: true });
-    } else if (fs.existsSync(imagePath)) {
-      const buffer = fs.readFileSync(imagePath);
-      await sock.sendMessage(jid, { image: buffer, caption: texto3 });
+    const media = obtenerBufferMenu();
+    if (media?.tipo === 'video') {
+      await sock.sendMessage(jid, { video: media.buffer, caption: texto3, gifPlayback: true });
+    } else if (media?.tipo === 'imagen') {
+      await sock.sendMessage(jid, { image: media.buffer, caption: texto3 });
     } else {
       await sock.sendMessage(jid, { text: texto3 });
     }
