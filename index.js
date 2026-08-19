@@ -187,6 +187,8 @@ async function startBot() {
     }
 
     if (connection === 'open') {
+      const { iniciarVigilanteConexion } = require('./lib/vigilanteConexion');
+      iniciarVigilanteConexion(sock);
       console.log(chalk.green.bold('✅ Bot conectado correctamente (ETAPA 5 - COMPLETA)'));
 
       if (intervaloSubastas) clearInterval(intervaloSubastas);
