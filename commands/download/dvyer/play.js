@@ -1,9 +1,4 @@
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { execFile } = require('child_process');
-const util = require('util');
-const execFileAsync = util.promisify(execFile);
 const { obtenerDatosDescarga, descargarArchivo, buscarYoutube, limpiarTexto } = require('../../../lib/dvyerapi');
 
 function formatearDuracion(segundos = 0) {
@@ -19,23 +14,6 @@ function formatearVistas(valor = 0) {
   return new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 }
 
-// Convierte cualquier audio a OGG/Opus mono, que es el formato que WhatsApp
-// reproduce de forma confiable en TODOS los dispositivos. El archivo original
-// (m4a/mp4) se reproduce bien en Android pero falla en iPhone con el error
-// "No se pudo descargar el audio" -- este es un problema conocido y documentado
-// de WhatsApp/Baileys, no un bug del bot en si.
-async function convertirAOgg(rutaEntrada) {
-  const rutaSalida = path.join(os.tmpdir(), `play-${Date.now()}.ogg`);
-  await execFileAsync('ffmpeg', [
-    '-i', rutaEntrada,
-    '-avoid_negative_ts', 'make_zero',
-    '-ac', '1',
-    '-c:a', 'libopus',
-    '-b:a', '64k',
-    rutaSalida
-  ]);
-  return rutaSalida;
-}
 
 module.exports = {
   name: 'play',
@@ -84,24 +62,25 @@ module.exports = {
     }).catch(() => sock.sendMessage(jid, { text: ficha }));
 
     let tempPath;
-    let tempOgg;
     try {
       const endpoint = quiereVideo ? 'ytmp4' : 'ytmp3';
       const datos = await obtenerDatosDescarga(endpoint, video.url);
       tempPath = await descargarArchivo(datos.remoteUrl, quiereVideo ? 'mp4' : 'm4a');
 
       const titulo = datos.title || video.title;
+      const buffer = fs.readFileSync(tempPath);
 
       if (quiereVideo) {
-        const buffer = fs.readFileSync(tempPath);
         await sock.sendMessage(jid, { video: buffer, caption: titulo });
       } else {
-        tempOgg = await convertirAOgg(tempPath);
-        const buffer = fs.readFileSync(tempOgg);
+        // Se manda el audio tal cual (sin pasarlo por ffmpeg), igual que
+        // .ytmp3 -- confirmado que asi se reproduce bien tanto en Android
+        // como en iPhone. Un intento anterior de convertir a OGG/Opus para
+        // "mejorar" la compatibilidad resulto ser lo que danaba el audio.
         await sock.sendMessage(jid, {
           audio: buffer,
-          mimetype: 'audio/ogg; codecs=opus',
-          ptt: false
+          mimetype: 'audio/mp4',
+          fileName: `${titulo}.m4a`
         });
       }
     } catch (err) {
@@ -112,7 +91,6 @@ module.exports = {
       await sock.sendMessage(jid, { text: textoError });
     } finally {
       if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      if (tempOgg && fs.existsSync(tempOgg)) fs.unlinkSync(tempOgg);
     }
   }
 };
