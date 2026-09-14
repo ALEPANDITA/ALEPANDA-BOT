@@ -48,8 +48,14 @@ module.exports = {
 
       await sock.sendMessage(jid, {
         audio: buffer,
-        mimetype: 'audio/mp4',
-        fileName: `${titulo}.m4a`
+        // El archivo que entrega la API de descarga es MP3 real (confirmado con
+        // ffprobe: 'Input #0, mp3'), aunque antes se etiquetaba como audio/mp4/.m4a.
+        // Android ignora la etiqueta y lo reproduce igual; iPhone SI confia en la
+        // etiqueta declarada y fallaba al recibir MP3 disfrazado de MP4. Aqui solo
+        // se corrige la etiqueta para que diga la verdad -- el audio en si NO se
+        // vuelve a codificar (eso fue lo que rompio las cosas la vez anterior).
+        mimetype: 'audio/mpeg',
+        fileName: `${titulo}.mp3`
       });
     } catch (err) {
       console.error(err);

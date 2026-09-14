@@ -65,7 +65,7 @@ module.exports = {
     try {
       const endpoint = quiereVideo ? 'ytmp4' : 'ytmp3';
       const datos = await obtenerDatosDescarga(endpoint, video.url);
-      tempPath = await descargarArchivo(datos.remoteUrl, quiereVideo ? 'mp4' : 'm4a');
+      tempPath = await descargarArchivo(datos.remoteUrl, quiereVideo ? 'mp4' : 'mp3');
 
       const titulo = datos.title || video.title;
       const buffer = fs.readFileSync(tempPath);
@@ -79,8 +79,11 @@ module.exports = {
         // "mejorar" la compatibilidad resulto ser lo que danaba el audio.
         await sock.sendMessage(jid, {
           audio: buffer,
-          mimetype: 'audio/mp4',
-          fileName: `${titulo}.m4a`
+          // Ver nota igual en ytmp3.js: el archivo real es MP3, se etiquetaba mal
+          // como audio/mp4/.m4a. Android ignoraba la etiqueta y reproducia bien;
+          // iPhone confiaba en ella y fallaba. Solo se corrige la etiqueta, no se re-codifica.
+          mimetype: 'audio/mpeg',
+          fileName: `${titulo}.mp3`
         });
       }
     } catch (err) {
