@@ -22,6 +22,12 @@ async function cambiarMute(sock, jid, msg, accion) {
   // -- si no coinciden, el mute se guarda pero nunca se detecta despues.
   const objetivo = await resolverJidReal(sock, objetivoCrudo, metadata);
 
+  // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
+  console.log(`[DIAGNOSTICO MUTE] accion=${accion} objetivoCrudo=${objetivoCrudo} objetivoResuelto=${objetivo}`);
+
+  // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
+  console.log(`[DIAGNOSTICO MUTE] accion=${accion} objetivoCrudo=${objetivoCrudo} objetivoResuelto=${objetivo}`);
+
   const db = leerDB();
   const usuario = getUsuario(db, objetivo);
   usuario.muteado = accion === 'mute';

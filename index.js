@@ -550,6 +550,8 @@ async function startBot() {
       guardarDB(db);
 
       if (usuario.muteado) {
+        // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
+        console.log(`[DIAGNOSTICO MUTE] mensaje de remitenteCrudo=${remitenteCrudo} resuelto=${remitente} -> muteado=true, se borra`);
         await sock.sendMessage(jid, { delete: msg.key });
         return;
       }
