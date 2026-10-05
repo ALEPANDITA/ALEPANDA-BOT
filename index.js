@@ -630,6 +630,12 @@ async function startBot() {
       return;
     }
 
+    // PANDITA: IA independiente (solo actua si esta activada con .boton en este chat)
+    try {
+      const pandita = require('./lib/pandita');
+      if (await pandita.manejarMensaje({ sock, jid, msg, texto, esGrupo, prefix, comandos, obtenerMetadata: obtenerMetadataCacheada })) return;
+    } catch (e) { console.error('[pandita] hook:', e); }
+
     if (!texto.startsWith(prefix)) return;
 
     const args = texto.slice(prefix.length).trim().split(/\s+/);

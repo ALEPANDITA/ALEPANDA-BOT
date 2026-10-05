@@ -30,3 +30,6 @@ gemini-key-state.json
 auth_info/
 auth_info/
 *.bak-*
+
+# Pandita (memoria y estado por chat, no subir)
+pandita-data.json*
