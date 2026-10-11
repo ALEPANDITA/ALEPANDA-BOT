@@ -33,3 +33,6 @@ auth_info/
 
 # Pandita (memoria y estado por chat, no subir)
 pandita-data.json*
+
+# Cookies de YouTube (son credenciales, no subir)
+cookies.txt
