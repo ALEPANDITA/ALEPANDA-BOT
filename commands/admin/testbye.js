@@ -50,6 +50,7 @@ module.exports = {
 
     const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
     await sock.sendMessage(jid, { ...payload, mentions: [remitente] });
+    await require('../../lib/audiosbienvenida').enviarAudios(sock, jid, 'bye', { forzar: true });
     const tEnvio = Date.now();
 
     console.log(

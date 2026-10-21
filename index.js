@@ -358,6 +358,7 @@ async function startBot() {
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
         await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
+        await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'welcome');
       }
 
       if (action === 'remove' && grupo.despedida) {
@@ -370,6 +371,7 @@ async function startBot() {
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
         await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
+        await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'bye');
       }
     }
 
@@ -447,7 +449,31 @@ async function startBot() {
     if (stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
       const propuesta = propuestasPorMensaje.get(stanzaIdRespuesta);
       const remitenteRespuesta = msg.key.participant || msg.key.remoteJid;
-      if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) {
+      const mismaPersonaCasar = async () => {
+        if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) return true;
+        try {
+          const { resolverJidReal } = require('./lib/identidad');
+          const metaCasar = await obtenerMetadataCacheada(sock, jid).catch(() => null);
+          const [x, y] = await Promise.all([
+            resolverJidReal(sock, remitenteRespuesta, metaCasar),
+            resolverJidReal(sock, propuesta.para, metaCasar)
+          ]);
+          const num = (v) => String(v || '').split('@')[0].split(':')[0];
+          const ids = (q) => [q.id, q.lid, q.jid, q.phoneNumber].filter(Boolean).map(num);
+          let igual = num(x) === num(y);
+          if (!igual) {
+            let ficha = (metaCasar && metaCasar.participants || []).find(q => ids(q).includes(num(propuesta.para)));
+            if (!ficha) {
+              const metaFresca = await obtenerMetadataCacheada(sock, jid, true).catch(() => null);
+              ficha = (metaFresca && metaFresca.participants || []).find(q => ids(q).includes(num(propuesta.para)));
+            }
+            if (ficha) igual = ids(ficha).includes(num(remitenteRespuesta));
+          }
+          if (igual) propuesta.para = remitenteRespuesta;
+          return igual;
+        } catch (e) { return false; }
+      };
+      if (await mismaPersonaCasar()) {
         const respuestaTexto = texto.trim().toLowerCase();
         if (respuestaTexto === 'si' || respuestaTexto === 'sí') {
           propuestasPorMensaje.delete(stanzaIdRespuesta);
@@ -612,7 +638,7 @@ async function startBot() {
         const { registrarMensaje, evaluarIntervencionSimon } = require('./lib/simonWatcher');
         const nombreParaSimon = msg.pushName || remitente.split('@')[0];
         registrarMensaje(jid, nombreParaSimon, texto);
-        evaluarIntervencionSimon(sock, jid).catch(err => {
+        evaluarIntervencionSimon(require('./lib/iaRespuestas').envolverSock(sock, 'simon'), jid).catch(err => {
           console.error('Fallo el watcher de Simon:', err);
         });
       }
@@ -628,6 +654,13 @@ async function startBot() {
         terminarJuego(jid);
       }
       return;
+    }
+
+    // Responder a un mensaje de Simi/Panda/Simon/Cupido sin escribir el comando
+    try {
+      if (texto && !texto.startsWith(prefix) && require('./lib/iaRespuestas').manejarRespuestaCitada({ sock, jid, msg, texto })) return;
+    } catch (err) {
+      console.error('[iaRespuestas]', err);
     }
 
     // PANDITA: IA independiente (solo actua si esta activada con .boton en este chat)
@@ -693,7 +726,7 @@ async function startBot() {
     try {
       const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
       await sock.sendMessage(jid, { react: { text: emojiCategoria, key: msg.key } });
-      await comando.execute(sock, jid, msg, { prefix, texto, comandos });
+      await comando.execute(require('./lib/iaRespuestas').envolverSockSiEsIA(sock, comando), jid, msg, { prefix, texto, comandos });
     } catch (err) {
       console.error(err);
       await sock.sendMessage(jid, { text: 'Ocurrio un error al ejecutar el comando.' });

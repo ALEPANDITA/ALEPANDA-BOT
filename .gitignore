@@ -36,3 +36,9 @@ pandita-data.json*
 
 # Cookies de YouTube (son credenciales, no subir)
 cookies.txt
+
+# Datos de uso (no subir)
+tops-data.json*
+ia-respuestas.json*
+assets/bienvenida/audios/
+assets/despedida/audios/

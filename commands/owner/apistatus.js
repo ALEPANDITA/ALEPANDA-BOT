@@ -3,7 +3,7 @@ const { leerKeys } = require('../../lib/apikeys');
 const { esOwnerBot } = require('../../lib/permisos');
 
 // Lista de servicios que el bot sabe usar (para mostrarlos aunque no tengan key guardada)
-const SERVICIOS_CONOCIDOS = ['gemini', 'groq', 'openrouter', 'tiktok', 'mediafire', 'pinterest', 'facebook', 'instagram', 'ytmp3', 'ytmp4'];
+const SERVICIOS_CONOCIDOS = ['gemini', 'groq', 'nvidia', 'openrouter', 'tiktok', 'mediafire', 'pinterest', 'facebook', 'instagram', 'ytmp3', 'ytmp4'];
 
 function enmascarar(clave) {
   if (typeof clave !== 'string' || !clave.trim()) return '';
