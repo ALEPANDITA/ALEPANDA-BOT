@@ -29,6 +29,7 @@ const estado = {
         `🎵 Canciones (mp3): *${e.canciones}*`,
         `🎬 Videos (mp4): *${e.videos}*`,
         `💾 Espacio usado: *${mb(e.bytes)}* de ${e.maxMB} MB`,
+        e.llena ? '🔴 Cache llena: ya no guarda canciones nuevas, pero sigue mandando las guardadas' : '🟢 Hay espacio: sigue guardando lo que se descargue',
         `🔎 Busquedas recordadas: *${e.busquedas}*`,
         '',
         `Para borrar todo y empezar de cero: *${prefix}limpiarcache*`
