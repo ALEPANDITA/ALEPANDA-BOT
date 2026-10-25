@@ -393,7 +393,12 @@ async function startBot() {
     ).trim();
     const esGrupo = jid.endsWith('@g.us');
 
-    if (esGrupo && config.grupoPelis && jid === config.grupoPelis && msg.message.videoMessage) {
+    // Usuarios bloqueados con .bloquear: no pueden usar nada del bot (comandos, botones, juegos, IAs...).
+    // La moderacion del grupo (mute, antiflood, antilink) si se les sigue aplicando.
+    let bloqueado = false;
+    try { bloqueado = !!require('./lib/bloqueos').estaBloqueado(msg); } catch (e) { console.error('[bloqueos]', e); }
+
+    if (!bloqueado && esGrupo && config.grupoPelis && jid === config.grupoPelis && msg.message.videoMessage) {
       try {
         const vm = msg.message.videoMessage;
         if (!vm.mimetype || vm.mimetype.startsWith('video/')) {
@@ -446,7 +451,7 @@ async function startBot() {
     const { propuestasPorMensaje, limpiarExpiradas } = require('./lib/matrimonio');
     limpiarExpiradas();
     const stanzaIdRespuesta = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
-    if (stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
+    if (!bloqueado && stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
       const propuesta = propuestasPorMensaje.get(stanzaIdRespuesta);
       const remitenteRespuesta = msg.key.participant || msg.key.remoteJid;
       const mismaPersonaCasar = async () => {
@@ -506,7 +511,7 @@ async function startBot() {
     }
 
     const botonId = msg.message?.templateButtonReplyMessage?.selectedId;
-    if (botonId && botonId.includes('|')) {
+    if (!bloqueado && botonId && botonId.includes('|')) {
       const [comandoBoton, urlBoton] = botonId.split('|');
       const comandoEncontrado = comandos.get(normalizarComando(comandoBoton));
       if (comandoEncontrado) {
@@ -537,7 +542,7 @@ async function startBot() {
       if (selectedIdDirecto && !selectedIdDirecto.includes('|')) idSeleccionado = selectedIdDirecto;
     }
 
-    if (idSeleccionado && idSeleccionado.startsWith(prefix)) {
+    if (!bloqueado && idSeleccionado && idSeleccionado.startsWith(prefix)) {
       const argsSel = idSeleccionado.slice(prefix.length).trim().split(/\s+/);
       const nombreComandoSel = argsSel[0];
       const comandoSel = comandos.get(normalizarComando(nombreComandoSel));
@@ -634,7 +639,7 @@ async function startBot() {
         }
       }
 
-      if (texto && grupo.simonAutomatico) {
+      if (texto && grupo.simonAutomatico && !bloqueado) {
         const { registrarMensaje, evaluarIntervencionSimon } = require('./lib/simonWatcher');
         const nombreParaSimon = msg.pushName || remitente.split('@')[0];
         registrarMensaje(jid, nombreParaSimon, texto);
@@ -643,6 +648,8 @@ async function startBot() {
         });
       }
     }
+
+    if (bloqueado) return;
 
     const { obtenerJuego, terminarJuego } = require('./lib/juegos');
     const juegoActivo = obtenerJuego(jid);

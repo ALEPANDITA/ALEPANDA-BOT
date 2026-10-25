@@ -43,3 +43,6 @@ ia-respuestas.json*
 assets/bienvenida/audios/
 assets/despedida/audios/
 cache-musica/
+
+# Usuarios bloqueados con .bloquear (datos, no subir)
+bloqueados.json*

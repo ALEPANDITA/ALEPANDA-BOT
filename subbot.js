@@ -234,6 +234,11 @@ async function iniciarSubbot() {
     const msg = messages[0];
     if (!msg?.message) return;
 
+    // Usuarios bloqueados con .bloquear: se ignoran (los mensajes del propio dueño del subbot no)
+    try {
+      if (!msg.key.fromMe && require('./lib/bloqueos').estaBloqueado(msg)) return;
+    } catch (e) { console.error('[bloqueos]', e); }
+
     const jid = msg.key.remoteJid;
     const texto = (
       msg.message.conversation ||
