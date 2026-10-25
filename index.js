@@ -10,7 +10,7 @@ const pino = require('pino');
 const { leerConfig } = require('./lib/config');
 const { esOwnerBot } = require('./lib/permisos');
 const { leerDB, getGrupo, getUsuario } = require('./lib/db');
-const { construirTexto, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura, conTimeout } = require('./lib/bienvenidapro');
+const { construirTexto, mencionesExtra, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura, conTimeout } = require('./lib/bienvenidapro');
 
 const fs = require('fs');
 const path = require('path');
@@ -357,7 +357,7 @@ async function startBot() {
           fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
-        await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
+        await sock.sendMessage(jid, { ...payload, mentions: [jidReal, ...mencionesExtra(plantilla, metadata, sock)] });
         await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'welcome');
       }
 
@@ -370,7 +370,7 @@ async function startBot() {
           fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
-        await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
+        await sock.sendMessage(jid, { ...payload, mentions: [jidReal, ...mencionesExtra(plantilla, metadata, sock)] });
         await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'bye');
       }
     }
