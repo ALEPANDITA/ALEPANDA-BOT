@@ -1,17 +1,17 @@
-const path = require('path');
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot } = require('../../lib/permisos');
-const { advertencia, exito, error: cajaError, caja } = require('../../lib/estilo');
-const { generarTexto } = require('../../lib/gemini');
-const { construirPromptNuevo, construirPromptArreglo, limpiarCodigo } = require('../../lib/crearcmd-ia');
-const { obtenerEstado, guardarEstado, borrarEstado } = require('../../lib/crearcmd-estado');
-const { procesarYInstalarCodigo } = require('../../lib/crearcmd-instalar');
+const { advertencia } = require('../../lib/estilo');
+const { obtenerEstado, borrarEstado } = require('../../lib/crearcmd-estado');
+const plan = require('../../lib/crearcmd-plan');
+
+// Si el ultimo comando se instalo bien hace mucho, un texto nuevo ya no se toma como "arreglo" de ese comando
+const MINUTOS_PARA_ARREGLAR_ULTIMO = 30;
 
 module.exports = {
   name: 'crearcmd',
   aliases: ['iacmd', 'generarcmd'],
   category: 'owner',
-  description: 'Crea un comando nuevo a partir de una descripcion en texto (usando IA), lo valida, lo instala y lo arregla si falla. Solo owner.',
+  description: 'Te ayuda a crear un comando nuevo con IA: primero te explica el plan, tu lo ajustas y cuando digas "si" lo crea y lo activa. Solo owner.',
   execute: async (sock, jid, msg, { prefix, texto, comandos }) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -20,96 +20,59 @@ module.exports = {
     }
 
     const argumentos = texto.trim().split(/\s+/).slice(1).join(' ').trim();
-    const estadoPrevio = obtenerEstado(jid);
+    const planPendiente = plan.obtenerPlan(jid);
+    let estadoPrevio = obtenerEstado(jid);
+
+    if (estadoPrevio && estadoPrevio.estado === 'exito' && Date.now() - (estadoPrevio.actualizado || 0) > MINUTOS_PARA_ARREGLAR_ULTIMO * 60 * 1000) {
+      estadoPrevio = null;
+    }
 
     if (!argumentos) {
       const lineas = [
-        `${prefix}crearcmd <descripcion del comando, incluye el endpoint/API, que hace, nombre y categoria si quieres> — crea un comando nuevo`,
-        `${prefix}crearcmd nuevo <descripcion> — ignora cualquier intento pendiente y empieza de cero`,
+        '👋 Cuentame que comando quieres y te explico como lo haria *antes* de crearlo.',
+        '',
+        '*Ejemplo:*',
+        `${prefix}crearcmd un comando ${prefix}clima que reciba una ciudad, consulte este endpoint https://... y responda la temperatura`,
+        '',
+        'Despues te mando el plan y tu decides:',
+        `• Pideme cambios respondiendo a mi mensaje (o con ${prefix}crearcmd <cambio>)`,
+        '• Cuando te guste, responde *si* y lo creo',
+        '• *cancelar* lo descarta',
+        '',
+        `${prefix}crearcmd nuevo <descripcion> — empezar de cero (ignora lo anterior)`
       ];
-      if (estadoPrevio) {
-        lineas.push('');
-        lineas.push(`Tienes un intento ${estadoPrevio.estado === 'fallo' ? 'FALLIDO' : 'instalado'} pendiente: *${estadoPrevio.nombre || '(sin nombre aun)'}*.`);
-        lineas.push(`Si me dices que esta mal (ej: "${prefix}crearcmd tal cosa no descarga bien, tira error de link") lo reviso y lo arreglo.`);
+      if (planPendiente) {
+        lineas.push('', '📌 Tienes un plan pendiente: responde *si*, pide cambios o escribe *cancelar*.');
+      } else if (estadoPrevio) {
+        lineas.push('', `📌 Tu ultimo comando: *${prefix}${estadoPrevio.nombre || '(sin nombre aun)'}* (${estadoPrevio.estado === 'fallo' ? 'fallo' : 'instalado'}). Si algo no funciona, dime que pasa con ${prefix}crearcmd <que pasa>.`);
       }
-      return sock.sendMessage(jid, { text: caja(lineas, { titulo: 'CREARCMD', estilo: 'neon' }) });
+      return sock.sendMessage(jid, { text: lineas.join('\n') }, { quoted: msg });
     }
 
     const forzarNuevo = /^nuevo\b/i.test(argumentos);
-    const descripcionUsuario = forzarNuevo ? argumentos.replace(/^nuevo\b/i, '').trim() : argumentos;
-
-    if (forzarNuevo) borrarEstado(jid);
-    const estadoParaUsar = forzarNuevo ? null : estadoPrevio;
-
-    if (forzarNuevo && !descripcionUsuario) {
-      return sock.sendMessage(jid, { text: advertencia(`Escribe la descripcion despues de "nuevo". Ej: ${prefix}crearcmd nuevo descarga un archivo desde tal endpoint...`) });
+    if (forzarNuevo) {
+      const descripcion = argumentos.replace(/^nuevo\b/i, '').trim();
+      if (!descripcion) {
+        return sock.sendMessage(jid, { text: advertencia(`Escribe la descripcion despues de "nuevo". Ej: ${prefix}crearcmd nuevo un comando que descargue algo desde tal endpoint...`) }, { quoted: msg });
+      }
+      if (planPendiente && planPendiente.ocupado) {
+        return sock.sendMessage(jid, { text: '⏳ Todavia estoy terminando el comando anterior, dame un momento.' }, { quoted: msg });
+      }
+      plan.descartarPlan(jid);
+      borrarEstado(jid);
+      return plan.iniciarPlanNuevo({ sock, jid, msg, comandos, prefix, descripcion });
     }
 
-    const esArreglo = !!estadoParaUsar;
-
-    await sock.sendMessage(jid, {
-      text: esArreglo ? '🛠️ Revisando y corrigiendo el comando anterior...' : '🧠 Redactando el comando con IA...'
-    }, { quoted: msg });
-
-    let prompt;
-    if (esArreglo) {
-      prompt = construirPromptArreglo({
-        descripcionOriginal: estadoParaUsar.descripcionOriginal,
-        codigoAnterior: estadoParaUsar.codigo,
-        errorAnterior: estadoParaUsar.error || '(el owner reporta que no funciona bien, sin error tecnico registrado)',
-        aclaracionUsuario: descripcionUsuario
-      });
-    } else {
-      prompt = construirPromptNuevo(descripcionUsuario);
+    // Ya hay un plan en pantalla: lo que escribas es "si", "cancelar" o un cambio
+    if (planPendiente) {
+      return plan.continuar({ sock, jid, msg, texto: argumentos, comandos, prefix });
     }
 
-    let respuestaIA;
-    try {
-      respuestaIA = await generarTexto(prompt);
-    } catch (err) {
-      const msgErr = err.code === 'NO_API_KEY'
-        ? 'No hay ninguna API key de IA configurada (Gemini/Groq/OpenRouter). Configura una con .setapikey para poder usar este comando.'
-        : `No se pudo generar el codigo: ${err.message}`;
-      return sock.sendMessage(jid, { text: cajaError(msgErr) });
+    // Hay un comando reciente (instalado o fallido): lo que escribas se toma como correccion de ese
+    if (estadoPrevio && estadoPrevio.codigo) {
+      return plan.iniciarPlanEstado({ sock, jid, msg, comandos, prefix, estadoPrevio, aclaracion: argumentos });
     }
 
-    const codigo = limpiarCodigo(respuestaIA);
-
-    if (!codigo) {
-      return sock.sendMessage(jid, { text: cajaError('La IA no devolvio ningun codigo utilizable. Intenta describir el comando con mas detalle.') });
-    }
-
-    const resultado = await procesarYInstalarCodigo({
-      codigo,
-      jid,
-      comandos,
-      descripcionOriginal: esArreglo ? estadoParaUsar.descripcionOriginal : descripcionUsuario,
-      rutaDestinoForzada: esArreglo ? estadoParaUsar.rutaArchivoFinal : null
-    });
-
-    if (!resultado.ok) {
-      return sock.sendMessage(jid, {
-        text: caja(
-          [resultado.mensajeError, '', `Dime exactamente que pasa (o que deberia pasar) con ${prefix}crearcmd <lo que esta mal> y lo corrijo.`],
-          { titulo: 'NO FUNCIONO, REVISANDO', estilo: 'neon' }
-        )
-      });
-    }
-
-    const resumen = resultado.comandosInstalados.map((cmd) => {
-      const aliasTxt = cmd.aliases?.length ? ` _(${cmd.aliases.map((a) => prefix + a).join(', ')})_` : '';
-      return `${prefix}${cmd.name}${aliasTxt} — ${cmd.description || 'sin descripcion'}`;
-    });
-
-    await sock.sendMessage(jid, {
-      text: exito(
-        `Instalado y activo YA, sin reiniciar el bot.\n\n` +
-        `Categoria: *${resultado.categoria}*\n` +
-        `Archivo: commands/${resultado.categoria}/${path.basename(resultado.rutaDestino)}\n\n` +
-        `${resumen.join('\n')}\n\n` +
-        `Si algo no funciona bien, dime exactamente que pasa con ${prefix}crearcmd <lo que esta mal> y lo corrijo sin que tengas que repetir toda la descripcion.`,
-        { titulo: 'CREARCMD', estilo: 'neon' }
-      )
-    });
+    return plan.iniciarPlanNuevo({ sock, jid, msg, comandos, prefix, descripcion: argumentos });
   }
 };
