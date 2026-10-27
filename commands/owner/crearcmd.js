@@ -34,6 +34,8 @@ module.exports = {
         '*Ejemplo:*',
         `${prefix}crearcmd un comando ${prefix}clima que reciba una ciudad, consulte este endpoint https://... y responda la temperatura`,
         '',
+        'Si pegas la URL de una API, la PRUEBO en vivo: veo que responde y si trae varias opciones (ej. una lista de reacciones) para hacer un comando por cada una.',
+        '',
         'Despues te mando el plan y tu decides:',
         `• Pideme cambios respondiendo a mi mensaje (o con ${prefix}crearcmd <cambio>)`,
         '• Cuando te guste, responde *si* y lo creo',
