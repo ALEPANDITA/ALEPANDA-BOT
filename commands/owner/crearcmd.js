@@ -39,6 +39,8 @@ module.exports = {
         '• Cuando te guste, responde *si* y lo creo',
         '• *cancelar* lo descarta',
         '',
+        'Si alguno de los nombres ya existe, lo PRUEBO antes de tocarlo: si funciona lo dejo igual; si falla lo arreglo con la API que me pases (siempre con respaldo y tu visto bueno).',
+        '',
         `${prefix}crearcmd nuevo <descripcion> — empezar de cero (ignora lo anterior)`
       ];
       if (planPendiente) {
