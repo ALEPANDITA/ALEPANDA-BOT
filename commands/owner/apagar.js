@@ -13,6 +13,12 @@ function codigoDeLink(texto) {
 async function resolverGrupo(sock, jid, msg, texto) {
   const codigo = codigoDeLink(texto);
 
+  // Invitacion compartida como tarjeta ("Invitacion al chat en grupo"): trae el grupo directo
+  const tarjeta = msg.message?.groupInviteMessage;
+  if (!codigo && tarjeta?.groupJid) {
+    return { id: tarjeta.groupJid, nombre: tarjeta.groupName || '' };
+  }
+
   if (!codigo) {
     if (jid.endsWith('@g.us')) {
       let nombre = '';

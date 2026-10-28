@@ -391,6 +391,7 @@ async function startBot() {
       msg.message.extendedTextMessage?.text ||
       msg.message.imageMessage?.caption ||
       msg.message.videoMessage?.caption ||
+      msg.message.groupInviteMessage?.caption ||
       ''
     ).trim();
     const esGrupo = jid.endsWith('@g.us');
