@@ -1,4 +1,4 @@
-const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
 const { resolverJidReal } = require('../../lib/identidad');
 
 async function cambiarMute(sock, jid, msg, accion) {
@@ -22,18 +22,14 @@ async function cambiarMute(sock, jid, msg, accion) {
   // -- si no coinciden, el mute se guarda pero nunca se detecta despues.
   const objetivo = await resolverJidReal(sock, objetivoCrudo, metadata);
 
-  // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
-  console.log(`[DIAGNOSTICO MUTE] accion=${accion} objetivoCrudo=${objetivoCrudo} objetivoResuelto=${objetivo}`);
-
-  // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
-  console.log(`[DIAGNOSTICO MUTE] accion=${accion} objetivoCrudo=${objetivoCrudo} objetivoResuelto=${objetivo}`);
-
   // .unmute solo avisa que desmuteo, pero NO quita el mute (a proposito): la unica
   // forma real de desmutear es .unmuteall.
+  // El mute es solo de ESTE grupo.
   if (accion === 'mute') {
     const db = leerDB();
-    const usuario = getUsuario(db, objetivo);
-    usuario.muteado = true;
+    const grupo = getGrupo(db, jid);
+    if (!grupo.muteados) grupo.muteados = {};
+    grupo.muteados[objetivo] = true;
     guardarDB(db);
   }
 

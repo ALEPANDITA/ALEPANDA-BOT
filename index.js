@@ -616,11 +616,19 @@ async function startBot() {
       grupo.mensajes[remitente] = (grupo.mensajes[remitente] || 0) + 1;
       guardarDB(db);
 
-      if (usuario.muteado) {
-        // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
-        console.log(`[DIAGNOSTICO MUTE] mensaje de remitenteCrudo=${remitenteCrudo} resuelto=${remitente} -> muteado=true, se borra`);
-        await sock.sendMessage(jid, { delete: msg.key });
-        return;
+      // El mute es por grupo (grupo.muteados), no global
+      if (grupo.muteados && grupo.muteados[remitente]) {
+        // Un muteado todavia puede escribir .unmuteall (solo lo ejecuta si es admin u owner)
+        let dejarPasar = false;
+        const prefijoMute = grupo.prefix || config.prefix || '.';
+        if (texto.startsWith(prefijoMute)) {
+          const cmdMute = comandos.get(normalizarComando(texto.slice(prefijoMute.length).trim().split(/\s+/)[0]));
+          dejarPasar = !!(cmdMute && cmdMute.permiteMuteado);
+        }
+        if (!dejarPasar) {
+          await sock.sendMessage(jid, { delete: msg.key });
+          return;
+        }
       }
 
       if (grupo.antiflood || grupo.antispam) {
@@ -636,7 +644,8 @@ async function startBot() {
             const { esAdminDelGrupo } = require('./lib/permisos');
             const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
             if (!esAdmin) {
-              usuario.muteado = true;
+              if (!grupo.muteados) grupo.muteados = {};
+              grupo.muteados[remitente] = true;
               guardarDB(db);
               await sock.sendMessage(jid, {
                 text: `🚫 @${remitente.split('@')[0]} fue silenciado por flood (mensajes muy seguidos).`,
