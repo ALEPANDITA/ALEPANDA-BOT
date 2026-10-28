@@ -28,10 +28,14 @@ async function cambiarMute(sock, jid, msg, accion) {
   // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
   console.log(`[DIAGNOSTICO MUTE] accion=${accion} objetivoCrudo=${objetivoCrudo} objetivoResuelto=${objetivo}`);
 
-  const db = leerDB();
-  const usuario = getUsuario(db, objetivo);
-  usuario.muteado = accion === 'mute';
-  guardarDB(db);
+  // .unmute solo avisa que desmuteo, pero NO quita el mute (a proposito): la unica
+  // forma real de desmutear es .unmuteall.
+  if (accion === 'mute') {
+    const db = leerDB();
+    const usuario = getUsuario(db, objetivo);
+    usuario.muteado = true;
+    guardarDB(db);
+  }
 
   const texto = accion === 'mute' ? 'Usuario muteado. Sus mensajes seran borrados.' : 'Usuario desmuteado.';
   await sock.sendMessage(jid, { text: texto });
