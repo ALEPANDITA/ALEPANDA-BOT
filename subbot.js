@@ -70,6 +70,7 @@ function cargarComandos() {
   const categorias = fs.readdirSync(basePath);
 
   for (const categoria of categorias) {
+    if (categoria.startsWith('_')) continue; // _eliminados / _staging no son comandos activos
     const catPath = path.join(basePath, categoria);
     if (!fs.statSync(catPath).isDirectory()) continue;
 

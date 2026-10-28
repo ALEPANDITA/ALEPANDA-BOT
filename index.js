@@ -78,18 +78,25 @@ function cargarComandos() {
   const basePath = path.join(__dirname, 'commands');
   const categorias = fs.readdirSync(basePath);
   for (const categoria of categorias) {
+    // Carpetas que empiezan con _ (_eliminados, _staging) no son comandos activos
+    if (categoria.startsWith('_')) continue;
     const catPath = path.join(basePath, categoria);
     if (!fs.statSync(catPath).isDirectory()) continue;
     const archivos = listarJsRecursivo(catPath);
     for (const rutaArchivo of archivos) {
-      const exportado = require(rutaArchivo);
-      const lista = Array.isArray(exportado) ? exportado : [exportado];
-      for (const comando of lista) {
-        if (!comando._rutaArchivo) comando._rutaArchivo = rutaArchivo;
-        comandos.set(comando.name, comando);
-        if (Array.isArray(comando.aliases)) {
-          for (const alias of comando.aliases) comandos.set(alias, comando);
+      try {
+        const exportado = require(rutaArchivo);
+        const lista = Array.isArray(exportado) ? exportado : [exportado];
+        for (const comando of lista) {
+          if (!comando._rutaArchivo) comando._rutaArchivo = rutaArchivo;
+          comandos.set(comando.name, comando);
+          if (Array.isArray(comando.aliases)) {
+            for (const alias of comando.aliases) comandos.set(alias, comando);
+          }
         }
+      } catch (err) {
+        // Un comando roto no debe tumbar todo el bot
+        console.error(`[comandos] No se pudo cargar ${path.relative(__dirname, rutaArchivo)}:`, err.message);
       }
     }
   }
