@@ -6,7 +6,7 @@ module.exports = {
   name: 'unmuteall',
   aliases: ['desmutear-todos', 'unmute-all'],
   category: 'admin',
-  description: 'Quita el mute a TODOS los usuarios muteados, en todos los grupos (es la unica forma de desmutear). Solo owner.',
+  description: 'Quita el mute a TODOS los usuarios muteados, en todos los grupos Solo owner.',
   groupOnly: true,
   permiteMuteado: true, // un owner muteado todavia puede usarlo
   execute: async (sock, jid, msg) => {
