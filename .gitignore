@@ -44,5 +44,6 @@ assets/bienvenida/audios/
 assets/despedida/audios/
 cache-musica/
 
-# Usuarios bloqueados con .bloquear (datos, no subir)
+# Usuarios bloqueados con .bloquear y grupos apagados con .apagar (datos, no subir)
 bloqueados.json*
+grupos-apagados.json*

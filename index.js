@@ -250,6 +250,8 @@ async function startBot() {
 
   sock.ev.on('group-participants.update', async (update) => {
     const { id: jid, participants, action } = update;
+    // Grupo apagado con .apagar: ni bienvenidas ni nada
+    try { if (require('./lib/apagados').estaApagado(jid)) return; } catch (e) { console.error('[apagados]', e); }
     const config = leerConfig();
     const db = leerDB();
     const grupo = getGrupo(db, jid);
@@ -392,6 +394,21 @@ async function startBot() {
       ''
     ).trim();
     const esGrupo = jid.endsWith('@g.us');
+
+    // Grupo apagado con .apagar: el bot no responde a nadie ahi. Unica excepcion: un owner con .encender
+    try {
+      if (esGrupo && require('./lib/apagados').estaApagado(jid)) {
+        const dbApagado = leerDB();
+        const prefixApagado = getGrupo(dbApagado, jid).prefix || config.prefix || '.';
+        if (texto.startsWith(prefixApagado)) {
+          const cmdApagado = comandos.get(normalizarComando(texto.slice(prefixApagado.length).trim().split(/\s+/)[0]));
+          if (cmdApagado && cmdApagado.permiteApagado && await esOwnerBot(sock, config, msg)) {
+            await cmdApagado.execute(sock, jid, msg, { prefix: prefixApagado, texto, comandos });
+          }
+        }
+        return;
+      }
+    } catch (e) { console.error('[apagados]', e); return; }
 
     // Usuarios bloqueados con .bloquear: no pueden usar nada del bot (comandos, botones, juegos, IAs...).
     // La moderacion del grupo (mute, antiflood, antilink) si se les sigue aplicando.

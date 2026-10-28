@@ -3,7 +3,7 @@ const { esOwnerBot } = require('../../lib/permisos');
 
 module.exports = {
   name: 'modoprivado',
-  aliases: ['soloyo', 'apagar'],
+  aliases: ['soloyo'],
   category: 'owner',
   description: 'Activa/desactiva que el bot solo responda al owner. Uso: .modoprivado on / .modoprivado off',
   execute: async (sock, jid, msg, { texto, prefix }) => {
