@@ -327,6 +327,17 @@ async function startBot() {
       // numero falso/confuso.
       const numeroParaImagen = String(numero).startsWith('lid-') ? null : numero;
 
+      if (action === 'promote') {
+        try {
+          // El texto de la etiqueta tiene que coincidir con el JID de la mencion para que se vea como @usuario
+          await sock.sendMessage(jid, {
+            text: `🎉 @${jidReal.split('@')[0]} felicidades, subiste a admin 👑`,
+            mentions: [jidReal]
+          });
+        } catch (err) { console.error('[promote]', err); }
+        return;
+      }
+
       if (action === 'add' && grupo.antifake && !numero.startsWith('lid-')) {
         const codigos = grupo.paisesPermitidos || ['52', '51'];
         const permitido = codigos.some(c => numero.startsWith(c));
