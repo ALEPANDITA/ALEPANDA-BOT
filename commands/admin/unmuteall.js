@@ -1,21 +1,17 @@
 const { leerDB, guardarDB } = require('../../lib/db');
-const { esAdminDelGrupo, esOwnerBot } = require('../../lib/permisos');
+const { esOwnerBot } = require('../../lib/permisos');
 const { leerConfig } = require('../../lib/config');
 
 module.exports = {
   name: 'unmuteall',
   aliases: ['desmutear-todos', 'unmute-all'],
   category: 'admin',
-  description: 'Quita el mute a TODOS los usuarios muteados, en todos los grupos (es la unica forma de desmutear).',
+  description: 'Quita el mute a TODOS los usuarios muteados, en todos los grupos (es la unica forma de desmutear). Solo owner.',
   groupOnly: true,
-  permiteMuteado: true, // un admin/owner muteado todavia puede usarlo
+  permiteMuteado: true, // un owner muteado todavia puede usarlo
   execute: async (sock, jid, msg) => {
-    const remitente = msg.key.participant || msg.key.remoteJid;
-    const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
-    const esOwner = await esOwnerBot(sock, leerConfig(), msg);
-
-    if (!esAdmin && !esOwner) {
-      return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
+    if (!(await esOwnerBot(sock, leerConfig(), msg))) {
+      return sock.sendMessage(jid, { text: 'Solo un owner del bot puede usar este comando.' });
     }
 
     // El mute es por grupo, pero .unmuteall es global: limpia TODOS los grupos
