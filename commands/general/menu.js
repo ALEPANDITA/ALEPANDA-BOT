@@ -1,4 +1,5 @@
 const { leerConfig } = require('../../lib/config');
+const { halloweenActivo } = require('../../lib/estilo');
 const fs = require('fs');
 const path = require('path');
 
@@ -95,13 +96,14 @@ function renderizarCategoria(cat, categorias, prefix, emojiComando) {
   const emoji = EMOJI_CATEGORIA[cat] || '📜';
   const titulo = NOMBRE_CATEGORIA[cat] || cat.toUpperCase();
 
-  let bloque = `╭── ${emoji} *${titulo}* (${categorias[cat].length}) ──╮\n`;
+  const hw = halloweenActivo();
+  let bloque = `${hw ? '🎃 ' : ''}╭── ${emoji} *${titulo}* (${categorias[cat].length}) ──╮\n`;
   for (const c of categorias[cat]) {
     const alias = c.aliases?.length ? ` _(${c.aliases.map((a) => prefix + a).join(', ')})_` : '';
     bloque += `│ ${emojiComando} *${prefix}${c.name}*${alias}\n`;
     bloque += `│   _${recortar(c.description || 'Sin descripcion')}_\n`;
   }
-  bloque += `╰${'─'.repeat(22)}╯\n\n`;
+  bloque += hw ? `╰──🕸️${'─'.repeat(14)}🦇──╯\n\n` : `╰${'─'.repeat(22)}╯\n\n`;
   return bloque;
 }
 
@@ -165,16 +167,20 @@ module.exports = {
       return sock.sendMessage(jid, { text: texto2 }, { quoted: msg });
     }
 
-    let texto3 = `╭─────────────────────╮\n`;
-    texto3 += `   ⚡ *ALEPANDA BOT* ⚡\n`;
-    texto3 += `   🐼 _Modo Panda Rudo_ 🐼\n`;
+    const hw = halloweenActivo();
+    const vi = hw ? '🦇' : '▸'; // vineta de las lineas de datos
+    let texto3 = hw ? `🕸️╭─────────────────────╮🕸️\n` : `╭─────────────────────╮\n`;
+    texto3 += hw ? `   🎃 *ALEPANDA BOT* 🎃\n` : `   ⚡ *ALEPANDA BOT* ⚡\n`;
+    texto3 += hw ? `   🐼 _Modo Panda Rudo_ 🦇\n` : `   🐼 _Modo Panda Rudo_ 🐼\n`;
     texto3 += `╰─────────────────────╯\n`;
     texto3 += `${saludoSegunHora()}\n`;
-    texto3 += `_"No hace falta ser el mas grande de la manada, solo el mas correoso."_\n\n`;
-    texto3 += `▸ Prefijo de combate: [ ${prefix} ]\n`;
-    texto3 += `▸ Tecnicas disponibles: ${totalComandos}\n`;
-    texto3 += `▸ Alfa del clan: *ALEPANDITA*\n`;
-    texto3 += `▸ Contacto directo: https://wa.me/527732654942\n`;
+    texto3 += `_"No hace falta ser el mas grande de la manada, solo el mas correoso."_\n`;
+    if (hw) texto3 += `🎃 _Noche de brujas en la manada: dulce o truco_ 🍬👻\n`;
+    texto3 += `\n`;
+    texto3 += `${vi} Prefijo de combate: [ ${prefix} ]\n`;
+    texto3 += `${vi} Tecnicas disponibles: ${totalComandos}\n`;
+    texto3 += `${vi} Alfa del clan: *ALEPANDITA*\n`;
+    texto3 += `${vi} Contacto directo: https://wa.me/527732654942\n`;
     texto3 += `📖 ¿Prefieres verlo por partes? Escribe ${prefix}menu1 hasta ${prefix}menu${totalPaginas} (una categoria a la vez).\n`;
     texto3 += `─────────────────────────\n\n`;
 
@@ -185,6 +191,7 @@ module.exports = {
     texto3 += `─────────────────────────\n`;
     texto3 += `✧ Escribe el comando tal como aparece arriba (con el prefijo incluido).\n`;
     texto3 += `🐼 Con garra y sin miedo.`;
+    if (hw) texto3 += `\n🎃🦇👻 _Feliz Halloween de parte de la manada_ 👻🦇🎃`;
 
     const media = obtenerBufferMenu();
     if (media?.tipo === 'video') {
