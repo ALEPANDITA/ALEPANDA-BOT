@@ -1,15 +1,12 @@
 const { leerConfig } = require('../../lib/config');
-const fs = require('fs');
-const path = require('path');
+const { borrarMenu } = require('../../lib/menumedia');
 const { esOwnerBot } = require('../../lib/permisos');
 const { exito, advertencia, info } = require('../../lib/estilo');
-
-const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
 
 module.exports = {
   name: 'delmenuimg',
   category: 'owner',
-  description: 'Elimina la imagen del menu (solo owner)',
+  description: 'Elimina la imagen del menu de ESTE grupo (solo owner). En privado borra la del menu general',
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -18,9 +15,9 @@ module.exports = {
       return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS', estilo: 'neon' }) });
     }
 
-    if (fs.existsSync(imagePath)) {
-      fs.unlinkSync(imagePath);
-      return sock.sendMessage(jid, { text: exito('Imagen del menu eliminada. Se usara texto simple.', { titulo: 'MENU ACTUALIZADO', estilo: 'neon' }) });
+    const { borrado, deGrupo } = borrarMenu(jid, 'img');
+    if (borrado) {
+      return sock.sendMessage(jid, { text: exito(deGrupo ? 'Imagen del menu de este grupo eliminada. Se usara la del menu general (o texto simple).' : 'Imagen del menu general eliminada.', { titulo: 'MENU ACTUALIZADO', estilo: 'neon' }) });
     }
 
     await sock.sendMessage(jid, { text: info('No hay ninguna imagen configurada.', { titulo: 'MENU', estilo: 'neon' }) });

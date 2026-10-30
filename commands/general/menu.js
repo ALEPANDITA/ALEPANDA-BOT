@@ -3,34 +3,31 @@ const { halloweenActivo } = require('../../lib/estilo');
 const fs = require('fs');
 const path = require('path');
 
-const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
-const videoPath = path.join(__dirname, '..', '..', 'assets', 'menu.mp4');
+const menuMedia = require('../../lib/menumedia');
 
 // Cache en memoria del buffer del menu (video o imagen), para no releer el
 // archivo del disco entero en CADA .menu que pidan. Se invalida solo si el
 // archivo cambia (por .setmenuvideo/.setmenuimg/.delmenuvideo/.delmenuimg),
 // comparando la fecha de modificacion, asi que sigue actualizandose bien.
-let cacheMenuMedia = null; // { tipo: 'video'|'imagen', buffer, mtimeMs, ruta }
+const cacheMenuMedia = new Map(); // ruta -> { tipo: 'video'|'imagen', buffer, mtimeMs, ruta }
 
-function obtenerBufferMenu() {
-  const rutaActual = fs.existsSync(videoPath) ? videoPath : (fs.existsSync(imagePath) ? imagePath : null);
-  if (!rutaActual) {
-    cacheMenuMedia = null;
-    return null;
-  }
+// jid: chat donde se pidio el menu (cada grupo puede tener su propia imagen/video)
+function obtenerBufferMenu(jid) {
+  const rutaActual = menuMedia.rutaParaMenu(jid);
+  if (!rutaActual) return null;
 
   const stat = fs.statSync(rutaActual);
-  if (cacheMenuMedia && cacheMenuMedia.ruta === rutaActual && cacheMenuMedia.mtimeMs === stat.mtimeMs) {
-    return cacheMenuMedia;
-  }
+  const guardado = cacheMenuMedia.get(rutaActual);
+  if (guardado && guardado.mtimeMs === stat.mtimeMs) return guardado;
 
-  cacheMenuMedia = {
-    tipo: rutaActual === videoPath ? 'video' : 'imagen',
+  const nuevo = {
+    tipo: menuMedia.esVideo(rutaActual) ? 'video' : 'imagen',
     buffer: fs.readFileSync(rutaActual),
     mtimeMs: stat.mtimeMs,
     ruta: rutaActual
   };
-  return cacheMenuMedia;
+  cacheMenuMedia.set(rutaActual, nuevo);
+  return nuevo;
 }
 
 const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'owner', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'config', 'nsfw'];
@@ -193,7 +190,7 @@ module.exports = {
     texto3 += `🐼 Con garra y sin miedo.`;
     if (hw) texto3 += `\n🎃🦇👻 _Feliz Halloween de parte de la manada_ 👻🦇🎃`;
 
-    const media = obtenerBufferMenu();
+    const media = obtenerBufferMenu(jid);
     if (media?.tipo === 'video') {
       await sock.sendMessage(jid, { video: media.buffer, caption: texto3, gifPlayback: true });
     } else if (media?.tipo === 'imagen') {
