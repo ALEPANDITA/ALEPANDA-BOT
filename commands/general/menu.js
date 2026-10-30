@@ -89,18 +89,91 @@ function recortar(texto = '', max = 90) {
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
+// ---------- Estilo Halloween (.halloween on/off) ----------
+const EMOJI_CATEGORIA_HW = {
+  general: '🏚️', subbot: '🦇', download: '⚰️', casino: '🎰', gacha: '🧪', 'gacha-anime': '🎴',
+  fun: '👻', owner: '👑', economia: '🎃', perfil: '💀', anime: '🎌', admin: '🧙', ia: '🔮',
+  tools: '🕯️', config: '📜', interaction: '🧛', niveles: '🏆', nsfw: '🔞'
+};
+
+const NOMBRE_CATEGORIA_HW = {
+  general: 'GUARIDA PANDA EMBRUJADA (General)',
+  subbot: 'CLAN DE SOMBRAS (Subbots)',
+  download: 'ARSENAL DE GARRAS MALDITAS (Descargas)',
+  casino: 'CALLEJON DEL BAMBU MALDITO (Casino)',
+  gacha: 'RULETA DEL DESTINO OSCURO (Gacha)',
+  'gacha-anime': 'GACHA ANIME DE TERROR',
+  fun: 'MANADA DE LA NOCHE (Diversion)',
+  owner: 'ALFA DEL CLAN (Owner)',
+  anime: 'ANIME NOCTURNO',
+  admin: 'GUARDIANES DEL CEMENTERIO (Administracion)',
+  economia: 'BOVEDA DE CALABAZAS (Economia)',
+  perfil: 'FICHA DE GUERRERO NOCTURNO (Perfil)',
+  ia: 'ORACULO PANDA DE LA BRUJA (IA)',
+  tools: 'HERRAMIENTAS DE BRUJERIA',
+  config: 'GRIMORIO DEL CLAN (Config)',
+  interaction: 'RITUAL DE MANADA (Interacciones)',
+  niveles: 'SENDERO NOCTURNO DEL GUERRERO (Niveles)',
+  nsfw: 'CRIPTA PROHIBIDA (NSFW)'
+};
+
+const SEPARADOR_HW = '🕸️━━━━━━━━━━━━━━━━━━━🕸️';
+const CIERRE_HW = '🦇━━━━━━━━━━━━━━━━━━━🦇';
+
+function saludoHalloween() {
+  const hora = new Date().getHours();
+  if (hora >= 5 && hora < 12) return '🌅 Buenos dias, cachorro de la manada... los fantasmas aun duermen';
+  if (hora >= 12 && hora < 19) return '🌤️ Buenas tardes, panda guerrero... ya huele a calabaza';
+  return '🌙 Buenas noches, que salgan los pandas fantasma 👻';
+}
+
+// Cuenta regresiva al 31 de octubre (hora de Tijuana). Vacio si Halloween ya paso.
+function cuentaRegresivaHalloween() {
+  try {
+    const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Tijuana', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(new Date()).reduce((o, x) => ({ ...o, [x.type]: x.value }), {});
+    const hoy = Date.UTC(+p.year, +p.month - 1, +p.day);
+    const dias = Math.round((Date.UTC(+p.year, 9, 31) - hoy) / 86400000);
+    if (dias === 0) return '🎃 *¡HOY ES HALLOWEEN!* La manada sale a pedir dulces 🍬';
+    if (dias === 1) return '🎃 Mañana es Halloween... ¿ya tienes tu disfraz? 🧛';
+    if (dias > 1 && dias <= 31) return `🎃 Faltan *${dias} dias* para Halloween 🕯️`;
+  } catch (_) { /* sin cuenta regresiva */ }
+  return '';
+}
+
+const BULLETS_HW = ['🎃', '👻', '🦇', '🕷️', '💀', '🕯️'];
+
+function renderizarCategoriaHalloween(cat, categorias, prefix, emojiComando) {
+  const emoji = EMOJI_CATEGORIA_HW[cat] || EMOJI_CATEGORIA[cat] || '📜';
+  const titulo = NOMBRE_CATEGORIA_HW[cat] || NOMBRE_CATEGORIA[cat] || cat.toUpperCase();
+  const n = categorias[cat].length;
+
+  let bloque = `${SEPARADOR_HW}\n`;
+  bloque += `${emoji} *${titulo}*\n`;
+  bloque += `${BULLETS_HW[0]} _${n} comando${n === 1 ? '' : 's'} en esta cripta_ ${BULLETS_HW[1]}\n`;
+  bloque += `${SEPARADOR_HW}\n`;
+  categorias[cat].forEach((c, i) => {
+    const alias = c.aliases?.length ? ` _(${c.aliases.map((a) => prefix + a).join(', ')})_` : '';
+    bloque += `${BULLETS_HW[i % BULLETS_HW.length]} ${emojiComando} *${prefix}${c.name}*${alias}\n`;
+    bloque += `    ↳ _${recortar(c.description || 'Sin descripcion')}_\n`;
+  });
+  bloque += `${CIERRE_HW}\n\n`;
+  return bloque;
+}
+
 function renderizarCategoria(cat, categorias, prefix, emojiComando) {
+  if (halloweenActivo()) return renderizarCategoriaHalloween(cat, categorias, prefix, emojiComando);
+
   const emoji = EMOJI_CATEGORIA[cat] || '📜';
   const titulo = NOMBRE_CATEGORIA[cat] || cat.toUpperCase();
 
-  const hw = halloweenActivo();
-  let bloque = `${hw ? '🎃 ' : ''}╭── ${emoji} *${titulo}* (${categorias[cat].length}) ──╮\n`;
+  let bloque = `╭── ${emoji} *${titulo}* (${categorias[cat].length}) ──╮\n`;
   for (const c of categorias[cat]) {
     const alias = c.aliases?.length ? ` _(${c.aliases.map((a) => prefix + a).join(', ')})_` : '';
     bloque += `│ ${emojiComando} *${prefix}${c.name}*${alias}\n`;
     bloque += `│   _${recortar(c.description || 'Sin descripcion')}_\n`;
   }
-  bloque += hw ? `╰──🕸️${'─'.repeat(14)}🦇──╯\n\n` : `╰${'─'.repeat(22)}╯\n\n`;
+  bloque += `╰${'─'.repeat(22)}╯\n\n`;
   return bloque;
 }
 
@@ -154,41 +227,70 @@ module.exports = {
       }
 
       const cat = categoriasOrdenadas[paginaSolicitada - 1];
-      let texto2 = `📖 *Pagina ${paginaSolicitada} de ${totalPaginas}*\n\n`;
+      const hwPag = halloweenActivo();
+      let texto2 = hwPag
+        ? `👻 *Pagina ${paginaSolicitada} de ${totalPaginas}* 🎃\n\n`
+        : `📖 *Pagina ${paginaSolicitada} de ${totalPaginas}*\n\n`;
       texto2 += renderizarCategoria(cat, categorias, prefix, emojiComando);
-      texto2 += `─────────────────────────\n`;
-      if (paginaSolicitada > 1) texto2 += `◂ Anterior: ${prefix}menu${paginaSolicitada - 1}\n`;
-      if (paginaSolicitada < totalPaginas) texto2 += `▸ Siguiente: ${prefix}menu${paginaSolicitada + 1}\n`;
-      texto2 += `☰ Menu completo: ${prefix}menu`;
+      texto2 += hwPag ? `🕯️─────────────────────🕯️\n` : `─────────────────────────\n`;
+      if (paginaSolicitada > 1) texto2 += `${hwPag ? '🦇' : '◂'} Anterior: ${prefix}menu${paginaSolicitada - 1}\n`;
+      if (paginaSolicitada < totalPaginas) texto2 += `${hwPag ? '🦇' : '▸'} Siguiente: ${prefix}menu${paginaSolicitada + 1}\n`;
+      texto2 += `${hwPag ? '🎃' : '☰'} Menu completo: ${prefix}menu`;
 
       return sock.sendMessage(jid, { text: texto2 }, { quoted: msg });
     }
 
     const hw = halloweenActivo();
-    const vi = hw ? '🦇' : '▸'; // vineta de las lineas de datos
-    let texto3 = hw ? `🕸️╭─────────────────────╮🕸️\n` : `╭─────────────────────╮\n`;
-    texto3 += hw ? `   🎃 *ALEPANDA BOT* 🎃\n` : `   ⚡ *ALEPANDA BOT* ⚡\n`;
-    texto3 += hw ? `   🐼 _Modo Panda Rudo_ 🦇\n` : `   🐼 _Modo Panda Rudo_ 🐼\n`;
-    texto3 += `╰─────────────────────╯\n`;
-    texto3 += `${saludoSegunHora()}\n`;
-    texto3 += `_"No hace falta ser el mas grande de la manada, solo el mas correoso."_\n`;
-    if (hw) texto3 += `🎃 _Noche de brujas en la manada: dulce o truco_ 🍬👻\n`;
-    texto3 += `\n`;
-    texto3 += `${vi} Prefijo de combate: [ ${prefix} ]\n`;
-    texto3 += `${vi} Tecnicas disponibles: ${totalComandos}\n`;
-    texto3 += `${vi} Alfa del clan: *ALEPANDITA*\n`;
-    texto3 += `${vi} Contacto directo: https://wa.me/527732654942\n`;
-    texto3 += `📖 ¿Prefieres verlo por partes? Escribe ${prefix}menu1 hasta ${prefix}menu${totalPaginas} (una categoria a la vez).\n`;
-    texto3 += `─────────────────────────\n\n`;
+    let texto3;
 
-    for (const cat of categoriasOrdenadas) {
-      texto3 += renderizarCategoria(cat, categorias, prefix, emojiComando);
+    if (hw) {
+      texto3 = `🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️\n`;
+      texto3 += `      🎃 *ALEPANDA BOT* 🎃\n`;
+      texto3 += `   🐼 _Modo Panda Rudo_ 🐼\n`;
+      texto3 += ` 🦇 _Edicion Noche de Brujas_ 🦇\n`;
+      texto3 += `🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️🕸️\n`;
+      texto3 += `${saludoHalloween()}\n`;
+      texto3 += `_"No hace falta ser el mas grande de la manada, solo el mas correoso."_\n`;
+      const cuenta = cuentaRegresivaHalloween();
+      if (cuenta) texto3 += `${cuenta}\n`;
+      texto3 += `\n╭─── 🔮 *DATOS DEL CLAN* 🔮 ───╮\n`;
+      texto3 += `│ 🦇 Prefijo de combate: [ ${prefix} ]\n`;
+      texto3 += `│ 🕷️ Tecnicas disponibles: ${totalComandos}\n`;
+      texto3 += `│ 👑 Alfa del clan: *ALEPANDITA*\n`;
+      texto3 += `│ 📞 Contacto directo: https://wa.me/527732654942\n`;
+      texto3 += `╰────────────────────────╯\n`;
+      texto3 += `👻 ¿Prefieres verlo por partes? Escribe ${prefix}menu1 hasta ${prefix}menu${totalPaginas} (una cripta a la vez).\n\n`;
+
+      for (const cat of categoriasOrdenadas) {
+        texto3 += renderizarCategoria(cat, categorias, prefix, emojiComando);
+      }
+
+      texto3 += `🕯️━━━━━━━━━━━━━━━━━━━🕯️\n`;
+      texto3 += `✧ Escribe el comando tal como aparece arriba (con el prefijo incluido).\n`;
+      texto3 += `🐼 Con garra y sin miedo.\n`;
+      texto3 += `🎃🦇👻 _Feliz Halloween de parte de la manada_ 👻🦇🎃`;
+    } else {
+      texto3 = `╭─────────────────────╮\n`;
+      texto3 += `   ⚡ *ALEPANDA BOT* ⚡\n`;
+      texto3 += `   🐼 _Modo Panda Rudo_ 🐼\n`;
+      texto3 += `╰─────────────────────╯\n`;
+      texto3 += `${saludoSegunHora()}\n`;
+      texto3 += `_"No hace falta ser el mas grande de la manada, solo el mas correoso."_\n\n`;
+      texto3 += `▸ Prefijo de combate: [ ${prefix} ]\n`;
+      texto3 += `▸ Tecnicas disponibles: ${totalComandos}\n`;
+      texto3 += `▸ Alfa del clan: *ALEPANDITA*\n`;
+      texto3 += `▸ Contacto directo: https://wa.me/527732654942\n`;
+      texto3 += `📖 ¿Prefieres verlo por partes? Escribe ${prefix}menu1 hasta ${prefix}menu${totalPaginas} (una categoria a la vez).\n`;
+      texto3 += `─────────────────────────\n\n`;
+
+      for (const cat of categoriasOrdenadas) {
+        texto3 += renderizarCategoria(cat, categorias, prefix, emojiComando);
+      }
+
+      texto3 += `─────────────────────────\n`;
+      texto3 += `✧ Escribe el comando tal como aparece arriba (con el prefijo incluido).\n`;
+      texto3 += `🐼 Con garra y sin miedo.`;
     }
-
-    texto3 += `─────────────────────────\n`;
-    texto3 += `✧ Escribe el comando tal como aparece arriba (con el prefijo incluido).\n`;
-    texto3 += `🐼 Con garra y sin miedo.`;
-    if (hw) texto3 += `\n🎃🦇👻 _Feliz Halloween de parte de la manada_ 👻🦇🎃`;
 
     const media = obtenerBufferMenu(jid);
     if (media?.tipo === 'video') {
