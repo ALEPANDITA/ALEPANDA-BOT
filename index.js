@@ -249,9 +249,16 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('groups.update', (actualizaciones) => {
+  sock.ev.on('groups.update', async (actualizaciones) => {
     for (const act of actualizaciones) {
       if (act.id) cacheMetadataGrupos.delete(act.id);
+    }
+    // Alertas de grupo (.alertas on): quien cambio nombre/ajustes/icono/link
+    for (const act of actualizaciones) {
+      try {
+        if (act.id && require('./lib/apagados').estaApagado(act.id)) continue;
+        await require('./lib/alertas').alertaCambioGrupo(sock, act);
+      } catch (e) { console.error('[alertas]', e); }
     }
   });
 
@@ -326,6 +333,11 @@ async function startBot() {
       // (queda como "lid-xxxxx"), mejor no mostrar nada a que se vea un
       // numero falso/confuso.
       const numeroParaImagen = String(numero).startsWith('lid-') ? null : numero;
+
+      if (action === 'demote') {
+        try { await require('./lib/alertas').alertaDegradado(sock, jid, jidReal, update.author); } catch (err) { console.error('[alertas]', err); }
+        return;
+      }
 
       if (action === 'promote') {
         try {
