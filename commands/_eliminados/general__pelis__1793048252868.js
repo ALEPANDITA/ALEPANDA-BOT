@@ -4,11 +4,10 @@ const {
   obtenerPelicula,
   eliminarPelicula,
   purgarVencidas,
-  formatearTamano,
-  DIAS_VENCIMIENTO_DEFAULT
+  formatearTamano
 } = require('../../lib/pelis');
 const { leerConfig } = require('../../lib/config');
-const { caja } = require('../../lib/estilo');
+const { caja, advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
   name: 'pelis',
@@ -56,15 +55,25 @@ module.exports = {
     }
 
     await sock.sendMessage(jid, {
-      text: caja([`Descargando *${pelicula.nombre}*...`, 'Esto puede tardar segun el peso del archivo.'], { titulo: '🎬 UN MOMENTO', estilo: 'gamer' })
+      text: caja([`Preparando *${pelicula.nombre}*...`, 'Esto puede tardar unos segundos segun el peso del archivo.'], { titulo: '🎬 UN MOMENTO', estilo: 'gamer' })
     }, { quoted: msg });
 
     try {
+      // Validar si el mensaje y el videoMessage existen antes de intentar descargar
+      if (!pelicula.key || !pelicula.videoMessage) {
+        throw new Error('Los datos multimedia de la pelicula no son validos o estan incompletos.');
+      }
+
       const mensajeFalso = {
         key: pelicula.key,
         message: { videoMessage: pelicula.videoMessage }
       };
+
       const buffer = await downloadMediaMessage(mensajeFalso, 'buffer', {});
+
+      if (!buffer || buffer.length === 0) {
+        throw new Error('El archivo multimedia ya no esta disponible en los servidores de WhatsApp.');
+      }
 
       await sock.sendMessage(jid, {
         video: buffer,
@@ -72,13 +81,14 @@ module.exports = {
         caption: `🎬 ${pelicula.nombre}`,
         fileName: pelicula.nombre
       }, { quoted: msg });
+      
     } catch (err) {
-      console.warn(`[pelis] la pelicula #${pelicula.numero} ya no se pudo descargar, la elimino del catalogo:`, err.message);
+      console.warn(`[pelis] La pelicula #${pelicula.numero} (${pelicula.nombre}) ya no se pudo descargar, la elimino del catalogo:`, err.message);
       eliminarPelicula(pelicula.numero);
+      
       await sock.sendMessage(jid, {
-        text: caja(
-          [`La pelicula #${pelicula.numero} (${pelicula.nombre}) ya expiro en WhatsApp.`, 'La quite del catalogo automaticamente.'],
-          { titulo: 'PELIS', estilo: 'gamer' }
+        text: cajaError(
+          `La pelicula #${pelicula.numero} (${pelicula.nombre}) ya expiro o no esta disponible en los servidores de WhatsApp.\n\nLa he quitado del catalogo automaticamente.`
         )
       });
     }
