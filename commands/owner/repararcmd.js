@@ -4,7 +4,7 @@ const { leerConfig } = require('../../lib/config');
 const { esOwnerBot } = require('../../lib/permisos');
 const { advertencia, exito, error: cajaError, caja } = require('../../lib/estilo');
 const { generarTexto } = require('../../lib/gemini');
-const { construirPromptArreglo, limpiarCodigo } = require('../../lib/crearcmd-ia');
+const { construirPromptArreglo, limpiarCodigo, OPCIONES_CODIGO } = require('../../lib/crearcmd-ia');
 const { procesarYInstalarCodigo } = require('../../lib/crearcmd-instalar');
 
 const CARPETA_COMANDOS = path.join(__dirname, '..', '..', 'commands');
@@ -186,7 +186,7 @@ module.exports = {
 
         let respuestaIA;
         try {
-          respuestaIA = await generarTexto(prompt);
+          respuestaIA = await generarTexto(prompt, OPCIONES_CODIGO);
         } catch (err) {
           resumenFallidos.push(`${archivo}: no se pudo generar reparacion (${err.message})`);
           await sock.sendMessage(jid, { text: cajaError(`${archivo}: no se pudo generar la reparacion (${err.message}).`) });

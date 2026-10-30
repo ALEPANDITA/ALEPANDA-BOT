@@ -3,6 +3,7 @@ auth_info/
 database.json
 api-keys.json
 assets/menu.jpg
+assets/menu-grupos/
 *.log
 confesiones.json
 subbots/
@@ -36,3 +37,14 @@ pandita-data.json*
 
 # Cookies de YouTube (son credenciales, no subir)
 cookies.txt
+
+# Datos de uso (no subir)
+tops-data.json*
+ia-respuestas.json*
+assets/bienvenida/audios/
+assets/despedida/audios/
+cache-musica/
+
+# Usuarios bloqueados con .bloquear y grupos apagados con .apagar (datos, no subir)
+bloqueados.json*
+grupos-apagados.json*

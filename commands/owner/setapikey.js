@@ -1,5 +1,5 @@
 const { leerConfig } = require('../../lib/config');
-const { agregarApiKey } = require('../../lib/apikeys');
+const { agregarApiKey, leerKeys, SERVICIOS_CONOCIDOS, servicioParecido } = require('../../lib/apikeys');
 const { esOwnerBot } = require('../../lib/permisos');
 const { exito, advertencia } = require('../../lib/estilo');
 
@@ -30,10 +30,28 @@ module.exports = {
       });
     }
 
-    const listaActual = agregarApiKey(servicio.toLowerCase(), clave);
+    const nombre = servicio.toLowerCase();
+    const forzar = /^(forzar|force)$/i.test(partes[2] || '');
+    const yaExiste = Object.prototype.hasOwnProperty.call(leerKeys(), nombre);
+
+    // Si el nombre no es de un servicio que el bot usa (ej. "gorq" en vez de "groq"), no se guarda
+    if (!forzar && !yaExiste && !SERVICIOS_CONOCIDOS.includes(nombre)) {
+      const parecido = servicioParecido(nombre);
+      const sugerencia = parecido
+        ? `¿Quisiste decir *${parecido}*?\nUsa: ${prefix}setapikey ${parecido} TU_CLAVE`
+        : `Servicios validos:\n${SERVICIOS_CONOCIDOS.join(', ')}`;
+      return sock.sendMessage(jid, {
+        text: advertencia(
+          `No existe el servicio *${servicio}*, no guarde nada.\n\n${sugerencia}\n\n(Si de verdad es un servicio nuevo, agrega la palabra *forzar* al final.)`,
+          { titulo: 'SERVICIO DESCONOCIDO', estilo: 'neon' }
+        )
+      });
+    }
+
+    const listaActual = agregarApiKey(nombre, clave);
     await sock.sendMessage(jid, {
       text: exito(
-        `Clave guardada para el servicio: *${servicio}*\nAhora hay *${listaActual.length}* clave(s) guardada(s) para este servicio.`,
+        `Clave guardada para el servicio: *${nombre}*\nAhora hay *${listaActual.length}* clave(s) guardada(s) para este servicio.`,
         { titulo: 'API KEY GUARDADA', estilo: 'neon' }
       )
     });

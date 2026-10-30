@@ -5,52 +5,65 @@ module.exports = {
   category: 'nsfw',
   description: 'Imagen o gif aleatorio de yuri',
   execute: async (sock, jid, msg, { texto, prefix }) => {
+    const apiKey = 'evogb-WPHlBOdu';
+    const apiUrl = `https://api.evogb.org/nsfw/interaction?key=${apiKey}&type=yuri`;
     try {
-      const res = await fetch('https://nekos.best/api/v2/neko', {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        }
+      const res = await fetch(apiUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
       });
-      
-      if (!res.ok) {
-        throw new Error(`Error ${res.status}: ${res.statusText}`);
-      }
-      
-      const json = await res.json();
-      const results = json.results || [];
-      const item = results[Math.floor(Math.random() * results.length)];
+      if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`);
 
-      if (!item || !item.url) {
-        throw new Error('La API no devolvió una URL válida');
+      const contentType = res.headers.get('content-type') || '';
+      let imageUrl = null;
+      let imageBuffer = null;
+
+      if (contentType.includes('image')) {
+        // La API devolvió la imagen directamente
+        const arrayBuf = await res.arrayBuffer();
+        imageBuffer = Buffer.from(arrayBuf);
+      } else {
+        // La API devolvió JSON con la URL de la imagen/gif
+        const json = await res.json();
+
+        const tryExtract = (obj) => {
+          if (!obj) return null;
+          if (typeof obj === 'string') return obj;
+          if (obj.url) return obj.url;
+          if (obj.image) return obj.image;
+          if (Array.isArray(obj)) {
+            for (const item of obj) {
+              const found = tryExtract(item);
+              if (found) return found;
+            }
+          }
+          if (typeof obj === 'object') {
+            for (const key of Object.keys(obj)) {
+              const found = tryExtract(obj[key]);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+
+        imageUrl = tryExtract(json);
+        if (!imageUrl) throw new Error('La API no devolvió una URL válida');
       }
 
-      await sock.sendMessage(jid, { 
-        image: { url: item.url }, 
-        caption: 'Aquí tienes tu imagen yuri.' 
-      });
+      if (imageBuffer) {
+        await sock.sendMessage(jid, {
+          image: { url: imageBuffer },
+          caption: 'Aquí tienes tu imagen yuri.'
+        });
+      } else {
+        await sock.sendMessage(jid, {
+          image: { url: imageUrl },
+          caption: 'Aquí tienes tu imagen yuri.'
+        });
+      }
     } catch (err) {
       console.error(err);
-      try {
-        const resAlt = await fetch('https://api.catboys.com/img', {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-          }
-        });
-        if (resAlt.ok) {
-          const jsonAlt = await resAlt.json();
-          if (jsonAlt && jsonAlt.url) {
-            return await sock.sendMessage(jid, { 
-              image: { url: jsonAlt.url }, 
-              caption: 'Aquí tienes tu imagen yuri.' 
-            });
-          }
-        }
-      } catch (altErr) {
-        console.error(altErr);
-      }
-
-      await sock.sendMessage(jid, { 
-        text: cajaError(`Ocurrio un error al obtener la imagen: ${err.message}`, { titulo: 'ERROR' }) 
+      await sock.sendMessage(jid, {
+        text: cajaError(`Ocurrio un error al obtener la imagen: ${err.message}`, { titulo: 'ERROR' })
       });
     }
   }

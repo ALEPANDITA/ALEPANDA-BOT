@@ -132,7 +132,7 @@ function comandoTexto(tipo) {
   return {
     name: nombre,
     category: 'admin',
-    description: `Cambia el texto de ${etiqueta}. Usa #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo#`,
+    description: `Cambia el texto de ${etiqueta}. Usa #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo# #admins#`,
     groupOnly: true,
     execute: async (sock, jid, msg, { texto, prefix }) => {
       if (!(await esAdmin(sock, jid, msg))) {
@@ -142,7 +142,7 @@ function comandoTexto(tipo) {
       const nuevoTexto = texto.slice((prefix + nombre + ' ').length).trim();
       if (!nuevoTexto) {
         return sock.sendMessage(jid, {
-          text: `Uso: ${prefix}${nombre} <texto>\nPlaceholders: #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo#\nEjemplo: ${prefix}${nombre} 🐼 #numberuser# llego al clan de #namegp#`
+          text: `Uso: ${prefix}${nombre} <texto>\nPlaceholders: #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo# #admins# (etiqueta a los admins del grupo)\nEjemplo: ${prefix}${nombre} 🐼 #numberuser# llego al clan de #namegp#`
         });
       }
 
