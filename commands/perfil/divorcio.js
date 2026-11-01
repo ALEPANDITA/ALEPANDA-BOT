@@ -1,4 +1,5 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { registrarDivorcio } = require('../../lib/matrimonio');
 
 const FRASES = [
   'Se acabó el cuento de hadas, ahora sí a vivir en paz. 🕊️',
@@ -55,6 +56,7 @@ module.exports = {
     const parejaId = perfil.pareja;
     const perfilPareja = getUsuario(db, parejaId);
 
+    registrarDivorcio(perfil, perfilPareja);
     perfil.pareja = null;
     perfilPareja.pareja = null;
     guardarDB(db);

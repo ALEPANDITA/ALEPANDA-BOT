@@ -1,4 +1,5 @@
 const { leerDB, getUsuario } = require('../../lib/db');
+const { formatearCumple, edadDe } = require('../../lib/cumple');
 
 module.exports = {
   name: 'perfil',
@@ -14,8 +15,18 @@ module.exports = {
     const db = leerDB();
     const usuario = getUsuario(db, objetivo);
 
+    // Datos opcionales que cada quien pone con .setdesc / .setgenre / .setbirth
+    let extras = '';
+    if (usuario.descripcion) extras += `📝 ${usuario.descripcion}\n`;
+    if (usuario.genero) extras += `🚻 Genero: ${usuario.genero.charAt(0).toUpperCase()}${usuario.genero.slice(1)}\n`;
+    if (usuario.cumple) {
+      const edad = edadDe(usuario.cumple);
+      extras += `🎂 Cumpleaños: ${formatearCumple(usuario.cumple)}${edad !== null ? ` (${edad} años)` : ''}\n`;
+    }
+
     const texto2 = `👤 *PERFIL*\n\n` +
       `Usuario: @${objetivo.split('@')[0]}\n` +
+      extras +
       `💰 Saldo: ${usuario.saldo || 0}\n` +
       `🏦 Banco: $${usuario.banco || 0}\n` +
       `⚠️ Warns: ${usuario.warns || 0}`;

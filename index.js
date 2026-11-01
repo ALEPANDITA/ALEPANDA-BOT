@@ -543,6 +543,7 @@ async function startBot() {
           } else {
             perfilDe.pareja = propuesta.para;
             perfilPara.pareja = propuesta.de;
+            require('./lib/matrimonio').registrarBoda(perfilDe, propuesta.de, perfilPara, propuesta.para);
             guardarDB(dbCasar);
             await sock.sendMessage(propuesta.jid, {
               text: `💒 @${propuesta.de.split('@')[0]} y @${propuesta.para.split('@')[0]} ahora estan casados! Felicidades 🎉`,
