@@ -28,8 +28,8 @@ function describirCategoria(categoria, archivo) {
     let logomaker = '';
     try { logomaker = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'logomaker.js'), 'utf-8'); } catch (_) { /* sin contexto extra */ }
     return `Comandos de LOGOS en el archivo "${archivo}" (categoria "${categoria}"): el usuario escribe .<comando> <texto> y el bot manda UNA IMAGEN con ese texto en un efecto (ephoto360). ` +
-      `Cada comando usa generarLogo(texto, efecto) de ../../lib/logomaker, cuyo codigo es este (la API que falla casi siempre esta ahi):\n\n${logomaker}\n\n` +
-      `Mantén TODOS los comandos con los mismos nombres y la misma lista de efectos. Si la API de ese modulo es la que falla, haz el archivo autocontenido: deja generarLogo como primera opcion y agrega en este mismo archivo un respaldo con otra API real que genere esos efectos.`;
+      `Cada comando usa generarLogoVariado(texto, efectos) de ../../lib/logomaker (elige al azar uno de los efectos de su lista "efectos" y devuelve { buffer, numero, total }); el codigo de ese modulo es este (la API que falla casi siempre esta ahi):\n\n${logomaker}\n\n` +
+      `Mantén TODOS los comandos con los mismos nombres y la misma lista de efectos. Si la API de ese modulo es la que falla, haz el archivo autocontenido: deja generarLogoVariado como primera opcion (conservando las listas "efectos") y agrega en este mismo archivo un respaldo con otra API real que genere esos efectos.`;
   }
   return `Comando(s) del archivo "${archivo}" de la categoria "${categoria}". Cada comando debe terminar mandando su resultado (video, imagen, audio, sticker o documento).`;
 }
