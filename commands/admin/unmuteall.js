@@ -6,6 +6,7 @@ module.exports = {
   name: 'unmuteall',
   aliases: ['desmutear-todos', 'unmute-all'],
   category: 'admin',
+  menuOwner: true, // solo owner: sale en .menuowner, no en .menu
   description: 'Quita el mute a TODOS los usuarios muteados, en todos los grupos Solo owner.',
   groupOnly: true,
   permiteMuteado: true, // un owner muteado todavia puede usarlo

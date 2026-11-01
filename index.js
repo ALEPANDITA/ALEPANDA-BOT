@@ -93,6 +93,10 @@ function cargarComandos() {
           if (Array.isArray(comando.aliases)) {
             for (const alias of comando.aliases) comandos.set(alias, comando);
           }
+          // Alias que funcionan pero no se listan en el menu (ej. .menu1, .menu2, ...)
+          if (Array.isArray(comando.aliasesOcultas)) {
+            for (const alias of comando.aliasesOcultas) comandos.set(alias, comando);
+          }
         }
       } catch (err) {
         // Un comando roto no debe tumbar todo el bot
@@ -745,6 +749,9 @@ async function startBot() {
     const comando = comandos.get(normalizarComando(nombreComando));
 
     if (!comando) return;
+
+    // .menuowner: si quien lo escribe no es owner, el bot ni reacciona ni responde (silencio total)
+    if (comando.silencioNoOwner && !(await esOwnerBot(sock, config, msg))) return;
 
     if (comando.groupOnly && !esGrupo) {
       return sock.sendMessage(jid, { text: 'Este comando solo funciona dentro de un grupo.' });

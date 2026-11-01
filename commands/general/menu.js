@@ -1,5 +1,6 @@
 const { leerConfig } = require('../../lib/config');
 const { halloweenActivo } = require('../../lib/estilo');
+const { esComandoOwner } = require('../../lib/menuowner');
 const fs = require('fs');
 const path = require('path');
 
@@ -30,7 +31,8 @@ function obtenerBufferMenu(jid) {
   return nuevo;
 }
 
-const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'owner', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'config', 'nsfw'];
+// 'owner' ya no va aqui: los comandos de owner solo salen en .menuowner
+const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'config', 'nsfw'];
 
 // Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
 const MAX_PAGINAS_ALIAS = 20;
@@ -193,6 +195,7 @@ module.exports = {
     const emojiComando = leerConfig().menuEmoji || "🪄";
 
     for (const comando of comandos.values()) {
+      if (esComandoOwner(comando)) continue; // los de owner van en .menuowner
       const cat = comando.category || 'general';
       if (!categorias[cat]) categorias[cat] = [];
       if (!categorias[cat].some((c) => c.name === comando.name)) {

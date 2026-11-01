@@ -98,6 +98,10 @@ function cargarComandos() {
               comandos.set(alias, comando);
             }
           }
+          // Alias que funcionan pero no se listan en el menu (ej. .menu1, .menu2, ...)
+          if (Array.isArray(comando.aliasesOcultas)) {
+            for (const alias of comando.aliasesOcultas) comandos.set(alias, comando);
+          }
         }
       } catch (err) {
         console.error(`[subbot ${SUBBOT_ID}] Error cargando ${archivo}:`, err.message);
