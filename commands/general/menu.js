@@ -35,7 +35,7 @@ function obtenerBufferMenu(jid) {
 const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'config', 'nsfw'];
 
 // Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
-const MAX_PAGINAS_ALIAS = 20;
+const MAX_PAGINAS_ALIAS = 30;
 
 const EMOJI_CATEGORIA = {
   general: '🏠',
