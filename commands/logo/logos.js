@@ -1,4 +1,6 @@
 const { generarLogo } = require('../../lib/logomaker');
+const { leerConfig } = require('../../lib/config');
+const { esOwnerBot } = require('../../lib/permisos');
 const { advertencia, exito, error: cajaError } = require('../../lib/estilo');
 
 // Cada logo es un comando: .logoneon <texto>. Efectos de ephoto360.
@@ -57,8 +59,13 @@ function crearComando(logo) {
       } catch (err) {
         console.error('[logo]', logo.name, err.message);
         await sock.sendMessage(jid, { react: { text: '❌', key: msg.key } });
+        // El owner ve ademas la causa tecnica (para saber que proveedor fallo); los demas solo el aviso normal
+        let detalle = '';
+        try {
+          if (await esOwnerBot(sock, leerConfig(), msg)) detalle = `\n\n🔧 Detalle (solo owner): ${String(err.message).slice(0, 300)}`;
+        } catch (_) { /* sin detalle */ }
         await sock.sendMessage(jid, {
-          text: cajaError('No pude generar el logo ahorita. Intenta con otro texto o mas tarde.', { estilo: 'neon' })
+          text: cajaError('No pude generar el logo ahorita. Intenta con otro texto o mas tarde.' + detalle, { estilo: 'neon' })
         }, { quoted: msg });
       }
     }
