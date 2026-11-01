@@ -4,6 +4,7 @@ const { esOwnerBot } = require('../../lib/permisos');
 const { advertencia, error: cajaError, caja } = require('../../lib/estilo');
 const { diagnosticarComando } = require('../../lib/diagnostico-red');
 const plan = require('../../lib/crearcmd-plan');
+const { resolverCategoria } = require('../../lib/categorias');
 
 function normalizar(texto) {
   return String(texto || '')
@@ -47,6 +48,16 @@ module.exports = {
     // Hay un plan en pantalla y lo que escribes no es un comando: es "si", "cancelar" o un cambio
     if (planPendiente && !comando) {
       return plan.continuar({ sock, jid, msg, texto: partes.slice(1).join(' '), comandos, prefix });
+    }
+
+    // No es un comando pero si una categoria (ej. "logos", "anime"): se revisa con .repararcmd
+    if (!comando) {
+      const categoria = resolverCategoria(nombrePedido);
+      const reparar = comandos.get('repararcmd');
+      if (categoria && reparar) {
+        await sock.sendMessage(jid, { text: `📂 "${nombrePedido}" es una categoria, no un comando. La reviso completa con ${prefix}repararcmd ${categoria}.` }, { quoted: msg });
+        return reparar.execute(sock, jid, msg, { prefix, texto: `${prefix}repararcmd ${categoria}`, comandos });
+      }
     }
 
     if (!comando) {
