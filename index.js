@@ -216,6 +216,9 @@ async function startBot() {
         }
       }, 30 * 1000);
 
+      // .time: avisa por privado cuando se acaba el tiempo del bot en un grupo
+      try { require('./lib/tiempo-grupos').iniciarVigilanteTiempos(sock); } catch (err) { console.error('[time] No pude iniciar el vigilante:', err.message); }
+
       const { iniciarMonitorMemoria } = require('./lib/memoria');
       iniciarMonitorMemoria([podarCacheMetadataGrupos]);
     }
