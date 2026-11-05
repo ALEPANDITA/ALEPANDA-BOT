@@ -15,14 +15,21 @@ const INTENTOS_REPARACION = 2;
 
 // Categorias cuyos comandos necesitan un texto para funcionar (sin texto solo responden "escribe el texto",
 // y eso se confundiria con una falla). Con este texto se prueban de verdad.
-const TEXTO_DE_PRUEBA = { logo: 'Panda' };
+const TEXTO_DE_PRUEBA = { logo: 'Panda', logovideo: 'Panda' };
 // Algunas categorias tardan mas en responder (el logo se genera en un servidor externo).
-const TIMEOUT_POR_CATEGORIA = { logo: 40000 };
+const TIMEOUT_POR_CATEGORIA = { logo: 40000, logovideo: 150000 }; // un video tarda mucho mas que una imagen
 
 // Que se le dice a la IA sobre lo que hace cada categoria al repararla.
 function describirCategoria(categoria, archivo) {
   if (categoria === 'anime') {
     return `Comando(s) de reaccion/anime en el archivo "${archivo}" de la categoria "${categoria}". Debe(n) mandar un video/gif/imagen de reaccion (con o sin mencionar a alguien).`;
+  }
+  if (categoria === 'logovideo') {
+    let logomaker = '';
+    try { logomaker = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'logomaker.js'), 'utf-8'); } catch (_) { /* sin contexto extra */ }
+    return `Comandos de LOGOS EN VIDEO en el archivo "${archivo}" (categoria "${categoria}"): el usuario escribe .<comando> <texto> y el bot manda un VIDEO (mp4) o gif animado con ese texto (efectos de video de ephoto360). ` +
+      `Usan crearComandoLogo de ../../lib/logos-comando con { video: true }, que llama a generarLogoVariado(texto, efectos, { video: true }) de ../../lib/logomaker; el codigo de ese modulo es este:\n\n${logomaker}\n\n` +
+      `Mantén TODOS los comandos con los mismos nombres y la misma lista de efectos. Generar un video tarda hasta ~2 minutos, es normal.`;
   }
   if (categoria === 'logo') {
     let logomaker = '';
