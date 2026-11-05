@@ -32,7 +32,7 @@ function obtenerBufferMenu(jid) {
 }
 
 // 'owner' ya no va aqui: los comandos de owner solo salen en .menuowner
-const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'config', 'nsfw'];
+const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
 
 // Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
 const MAX_PAGINAS_ALIAS = 30;
@@ -53,6 +53,7 @@ const EMOJI_CATEGORIA = {
   ia: '🔮',
   tools: '🧰',
   logo: '🎨',
+  logovideo: '🎬',
   config: '⚙️',
   interaction: '🤝',
   niveles: '🏅',
@@ -75,6 +76,7 @@ const NOMBRE_CATEGORIA = {
   ia: 'ORACULO PANDA (IA)',
   tools: 'HERRAMIENTAS',
   logo: 'TALLER DE LOGOS (Logos)',
+  logovideo: 'LOGOS EN VIDEO (Animados)',
   config: 'CONFIGURACION DEL CLAN (Config)',
   interaction: 'CONTACTO DE MANADA (Interacciones)',
   niveles: 'SENDERO DEL GUERRERO (Niveles)',
@@ -97,7 +99,7 @@ function recortar(texto = '', max = 90) {
 const EMOJI_CATEGORIA_HW = {
   general: '🏚️', subbot: '🦇', download: '⚰️', casino: '🎰', gacha: '🧪', 'gacha-anime': '🎴',
   fun: '👻', owner: '👑', economia: '🎃', perfil: '💀', anime: '🎌', admin: '🧙', ia: '🔮',
-  tools: '🕯️', logo: '🎨', config: '📜', interaction: '🧛', niveles: '🏆', nsfw: '🔞'
+  tools: '🕯️', logo: '🎨', logovideo: '🎬', config: '📜', interaction: '🧛', niveles: '🏆', nsfw: '🔞'
 };
 
 const NOMBRE_CATEGORIA_HW = {
@@ -116,6 +118,7 @@ const NOMBRE_CATEGORIA_HW = {
   ia: 'ORACULO PANDA DE LA BRUJA (IA)',
   tools: 'HERRAMIENTAS DE BRUJERIA',
   logo: 'TALLER DE LOGOS MALDITOS (Logos)',
+  logovideo: 'LOGOS MALDITOS EN VIDEO (Animados)',
   config: 'GRIMORIO DEL CLAN (Config)',
   interaction: 'RITUAL DE MANADA (Interacciones)',
   niveles: 'SENDERO NOCTURNO DEL GUERRERO (Niveles)',
