@@ -219,6 +219,8 @@ async function iniciarSubbot() {
       vinculadoConExito = true;
       escribirStatus({ estado: 'conectado', numero: sock.user?.id?.split(':')[0] || null });
       console.log(`[subbot ${SUBBOT_ID}] Conectado correctamente.`);
+      // .cerrar <tiempo>: el subbot tambien abre solo los grupos que el cerro con tiempo
+      try { require('./lib/cierre-grupos').iniciarVigilanteCierres(sock); } catch (err) { console.error(`[subbot ${SUBBOT_ID}] No pude iniciar el vigilante de cierres:`, err.message); }
     }
 
     if (connection === 'close') {
