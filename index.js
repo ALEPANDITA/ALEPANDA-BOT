@@ -633,6 +633,9 @@ async function startBot() {
       const usuario = getUsuario(db, remitente);
       const grupo = getGrupo(db, jid);
 
+      // Si es alguien registrado (.registrar) que escribe con otro id (ej. su @lid), se aprende para reconocerlo siempre
+      try { require('./lib/registro').aprenderAlias(db, remitenteCrudo, remitente); } catch (_) { /* no es critico */ }
+
       if (!grupo.actividad) grupo.actividad = {};
       if (!grupo.mensajes) grupo.mensajes = {};
       grupo.actividad[remitente] = Date.now();
