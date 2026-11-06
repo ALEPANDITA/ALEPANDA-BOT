@@ -1,16 +1,13 @@
 const { leerConfig } = require('../../lib/config');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const fs = require('fs');
-const path = require('path');
+const { guardarMenu } = require('../../lib/menumedia');
 const { esOwnerBot } = require('../../lib/permisos');
 const { exito, advertencia, error: cajaError } = require('../../lib/estilo');
-
-const imagePath = path.join(__dirname, '..', '..', 'assets', 'menu.jpg');
 
 module.exports = {
   name: 'setmenuimg',
   category: 'owner',
-  description: 'Cambia la imagen del menu (responde a una imagen, solo owner)',
+  description: 'Cambia la imagen del menu de ESTE grupo (responde a una imagen, solo owner). En privado cambia el menu general',
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -32,8 +29,15 @@ module.exports = {
 
     try {
       const buffer = await downloadMediaMessage(mensajeConImagen, 'buffer', {});
-      fs.writeFileSync(imagePath, buffer);
-      await sock.sendMessage(jid, { text: exito('Imagen del menu actualizada correctamente.', { titulo: 'MENU ACTUALIZADO', estilo: 'neon' }) });
+      const deGrupo = guardarMenu(jid, 'img', buffer);
+      await sock.sendMessage(jid, {
+        text: exito(
+          deGrupo
+            ? 'Imagen del menu actualizada SOLO en este grupo. Los demas grupos no cambian.'
+            : 'Imagen del menu general actualizada (la usan los chats y los grupos que no tengan una propia).',
+          { titulo: 'MENU ACTUALIZADO', estilo: 'neon' }
+        )
+      });
     } catch (err) {
       console.error(err);
       await sock.sendMessage(jid, { text: cajaError('No se pudo guardar la imagen.', { estilo: 'neon' }) });

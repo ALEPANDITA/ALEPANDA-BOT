@@ -1,6 +1,6 @@
 const { leerConfig } = require('../../lib/config');
 const { leerDB, getGrupo } = require('../../lib/db');
-const { construirTexto, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura } = require('../../lib/bienvenidapro');
+const { construirTexto, mencionesExtra, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura } = require('../../lib/bienvenidapro');
 
 async function esAdmin(sock, jid, msg) {
   const metadata = await sock.groupMetadata(jid);
@@ -55,7 +55,8 @@ module.exports = {
     const tGenerar = Date.now();
 
     const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
-    await sock.sendMessage(jid, { ...payload, mentions: [remitente] });
+    await sock.sendMessage(jid, { ...payload, mentions: [remitente, ...mencionesExtra(plantilla, metadata, sock)] });
+    await require('../../lib/audiosbienvenida').enviarAudios(sock, jid, 'welcome', { forzar: true });
     const tEnvio = Date.now();
 
     console.log(

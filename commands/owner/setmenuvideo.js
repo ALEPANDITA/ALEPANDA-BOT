@@ -1,17 +1,15 @@
 const { leerConfig } = require('../../lib/config');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const fs = require('fs');
-const path = require('path');
+const { guardarMenu } = require('../../lib/menumedia');
 const { esOwnerBot } = require('../../lib/permisos');
 const { exito, advertencia, error: cajaError } = require('../../lib/estilo');
 
-const videoPath = path.join(__dirname, '..', '..', 'assets', 'menu.mp4');
 const LIMITE_SEGUNDOS = 15;
 
 module.exports = {
   name: 'setmenuvideo',
   category: 'owner',
-  description: 'Fija el video del menu (responde a un video, solo owner). Se usa en todos los grupos hasta que se cambie de nuevo.',
+  description: 'Fija el video del menu de ESTE grupo (responde a un video, solo owner). En privado cambia el menu general',
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -41,10 +39,12 @@ module.exports = {
 
     try {
       const buffer = await downloadMediaMessage(mensajeConVideo, 'buffer', {});
-      fs.writeFileSync(videoPath, buffer);
+      const deGrupo = guardarMenu(jid, 'vid', buffer);
       await sock.sendMessage(jid, {
         text: exito(
-          'Video del menu actualizado correctamente. Se reproducira en bucle automatico (tipo GIF) en todos los grupos hasta que lo cambies de nuevo.\n\nEste archivo tambien queda guardado dentro del proyecto (assets/menu.mp4), asi que si subes cambios a GitHub o mueves el bot a otro servidor, el video se mantiene igual a menos que tu lo reemplaces.',
+          deGrupo
+            ? 'Video del menu actualizado SOLO en este grupo (se reproduce en bucle tipo GIF). Los demas grupos no cambian.'
+            : 'Video del menu general actualizado (lo usan los chats y los grupos que no tengan uno propio).',
           { titulo: 'MENU ACTUALIZADO', estilo: 'neon' }
         )
       });

@@ -40,6 +40,25 @@ module.exports = {
 
     let mensaje = texto.slice((prefix + 'simi').length).trim();
 
+    if (/^(reset|reiniciar)\s+(all|todos|todo)$/i.test(mensaje)) {
+      if (!jid.endsWith('@g.us')) {
+        historialesSimi.set(clave, []);
+        return sock.sendMessage(jid, { text: 'Ya se me borro TU memoria, empezamos de cero contigo.' }, { quoted: msg });
+      }
+      const { leerConfig } = require('../../../lib/config');
+      const { esAdminDelGrupo, esOwnerBot } = require('../../../lib/permisos');
+      const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
+      const esOwner = await esOwnerBot(sock, leerConfig(), msg);
+      if (!esAdmin && !esOwner) {
+        return sock.sendMessage(jid, { text: 'Solo un admin o un owner puede borrar la memoria de todos.' }, { quoted: msg });
+      }
+      let borradas = 0;
+      for (const k of [...historialesSimi.keys()]) {
+        if (k.startsWith(jid + '::')) { historialesSimi.delete(k); borradas++; }
+      }
+      return sock.sendMessage(jid, { text: `Listo, borre la memoria de ${borradas} persona(s) en este grupo. Empezamos de cero con todos.` }, { quoted: msg });
+    }
+
     if (mensaje.toLowerCase() === 'reset' || mensaje.toLowerCase() === 'reiniciar') {
       historialesSimi.set(clave, []);
       return sock.sendMessage(jid, { text: 'Ya se me borro TU memoria, empezamos de cero contigo.' }, { quoted: msg });

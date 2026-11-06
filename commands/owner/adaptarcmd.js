@@ -3,7 +3,7 @@ const { leerConfig } = require('../../lib/config');
 const { esOwnerBot } = require('../../lib/permisos');
 const { advertencia, exito, error: cajaError, caja } = require('../../lib/estilo');
 const { generarTexto } = require('../../lib/gemini');
-const { construirPromptAdaptar, limpiarCodigo } = require('../../lib/crearcmd-ia');
+const { construirPromptAdaptar, limpiarCodigo, OPCIONES_CODIGO } = require('../../lib/crearcmd-ia');
 const { procesarYInstalarCodigo } = require('../../lib/crearcmd-instalar');
 
 const TAMANO_MAXIMO = 150 * 1024; // 150 KB, de sobra para un solo comando
@@ -81,7 +81,7 @@ module.exports = {
 
     let respuestaIA;
     try {
-      respuestaIA = await generarTexto(prompt);
+      respuestaIA = await generarTexto(prompt, OPCIONES_CODIGO);
     } catch (err) {
       const msgErr = err.code === 'NO_API_KEY'
         ? 'No hay ninguna API key de IA configurada (Gemini/Groq/OpenRouter). Configura una con .setapikey para poder usar este comando.'

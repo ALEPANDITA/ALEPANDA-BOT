@@ -70,6 +70,7 @@ function cargarComandos() {
   const categorias = fs.readdirSync(basePath);
 
   for (const categoria of categorias) {
+    if (categoria.startsWith('_')) continue; // _eliminados / _staging no son comandos activos
     const catPath = path.join(basePath, categoria);
     if (!fs.statSync(catPath).isDirectory()) continue;
 
@@ -96,6 +97,10 @@ function cargarComandos() {
               if (COMANDOS_BLOQUEADOS_EN_SUBBOT.has(alias)) continue;
               comandos.set(alias, comando);
             }
+          }
+          // Alias que funcionan pero no se listan en el menu (ej. .menu1, .menu2, ...)
+          if (Array.isArray(comando.aliasesOcultas)) {
+            for (const alias of comando.aliasesOcultas) comandos.set(alias, comando);
           }
         }
       } catch (err) {
@@ -214,6 +219,8 @@ async function iniciarSubbot() {
       vinculadoConExito = true;
       escribirStatus({ estado: 'conectado', numero: sock.user?.id?.split(':')[0] || null });
       console.log(`[subbot ${SUBBOT_ID}] Conectado correctamente.`);
+      // .cerrar <tiempo>: el subbot tambien abre solo los grupos que el cerro con tiempo
+      try { require('./lib/cierre-grupos').iniciarVigilanteCierres(sock); } catch (err) { console.error(`[subbot ${SUBBOT_ID}] No pude iniciar el vigilante de cierres:`, err.message); }
     }
 
     if (connection === 'close') {
@@ -233,6 +240,11 @@ async function iniciarSubbot() {
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     if (!msg?.message) return;
+
+    // Usuarios bloqueados con .bloquear: se ignoran (los mensajes del propio dueño del subbot no)
+    try {
+      if (!msg.key.fromMe && require('./lib/bloqueos').estaBloqueado(msg)) return;
+    } catch (e) { console.error('[bloqueos]', e); }
 
     const jid = msg.key.remoteJid;
     const texto = (

@@ -3,13 +3,14 @@ const { exito, error: cajaError, advertencia } = require('../../lib/estilo');
 
 module.exports = {
   name: 'apostar',
+  aliases: ['cf', 'coinflip', 'flip'],
   category: 'casino',
-  description: 'Apostar cara o cruz (ej: .apostar 100 cara)',
+  description: 'Apostar cara o cruz (ej: .apostar 100 cara). Si no eliges, va a cara',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const remitente = msg.key.participant || msg.key.remoteJid;
     const partes = texto.trim().split(/\s+/);
     const apuesta = parseInt(partes[1]);
-    const eleccion = (partes[2] || '').toLowerCase();
+    const eleccion = (partes[2] || 'cara').toLowerCase();
 
     if (!apuesta || apuesta <= 0 || !['cara', 'cruz'].includes(eleccion)) {
       return sock.sendMessage(jid, {
