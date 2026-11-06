@@ -1,4 +1,5 @@
 const { esAdminDelGrupo, esAdminDelBot } = require('../../lib/permisos');
+const { cancelarApertura } = require('../../lib/cierre-grupos');
 
 module.exports = {
   name: 'abrir',
@@ -18,6 +19,8 @@ module.exports = {
     }
 
     await sock.groupSettingUpdate(jid, 'not_announcement');
-    await sock.sendMessage(jid, { text: 'Grupo abierto. Todos pueden escribir.' });
+    // Si estaba cerrado con tiempo (.cerrar 30m), ya no hay que abrirlo solo
+    const habia = cancelarApertura(jid);
+    await sock.sendMessage(jid, { text: `Grupo abierto. Todos pueden escribir.${habia ? '\n(Se cancelo la apertura automatica programada.)' : ''}` });
   }
 };
