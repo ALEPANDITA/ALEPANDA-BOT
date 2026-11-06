@@ -1,5 +1,5 @@
 const { leerConfig } = require('../../lib/config');
-const { halloweenActivo } = require('../../lib/estilo');
+const { halloweenActivo, caja } = require('../../lib/estilo');
 const { esComandoOwner } = require('../../lib/menuowner');
 const fs = require('fs');
 const path = require('path');
@@ -194,6 +194,24 @@ module.exports = {
   category: 'general',
   description: 'Muestra el menu de comandos (o una categoria a la vez con .menu1, .menu2, etc)',
   execute: async (sock, jid, msg, { prefix, texto, comandos }) => {
+    // Registro obligatorio: sin registrarse (.registrar <nombre> <edad> <hombre/mujer>) no se muestra el menu.
+    // Los owners pasan sin registrarse. Si el chequeo falla por algo raro, se muestra el menu igual (no se bloquea a nadie por un error).
+    try {
+      const { esOwnerBot } = require('../../lib/permisos');
+      const { obtenerRegistro } = require('../../lib/registro');
+      let metadata = null;
+      if (String(jid).endsWith('@g.us')) { try { metadata = await sock.groupMetadata(jid); } catch (_) { metadata = null; } }
+      if (!(await esOwnerBot(sock, leerConfig(), msg)) && !(await obtenerRegistro(sock, msg, jid, metadata))) {
+        return sock.sendMessage(jid, {
+          text: caja([
+            'Para usar el menu primero tienes que registrarte.', '',
+            `Escribe: ${prefix}registrar <nombre> <edad> <hombre o mujer>`,
+            `Ejemplo: ${prefix}registrar Ale 20 mujer`
+          ], { titulo: 'REGISTRO', estilo: 'neon' })
+        }, { quoted: msg });
+      }
+    } catch (err) { console.error('[registro] No pude revisar el registro para el menu:', err && err.message ? err.message : err); }
+
     const categorias = {};
     const emojiComando = leerConfig().menuEmoji || "🪄";
 
