@@ -155,7 +155,7 @@ module.exports = {
       }
 
       const vsBot = input === 'bot';
-      if (!vsBot && await mismaPersona(sock, jid, mencionado, idsDeRemitente(msg))) {
+      if (!vsBot && mismoNumero(mencionado, idsDeRemitente(msg))) { // rapido: retar no debe demorar
         return sock.sendMessage(jid, { text: advertencia('No puedes retarte a ti mismo.', { titulo: '3 EN RAYA' }) });
       }
 

@@ -1,7 +1,7 @@
 const { iniciarJuego, obtenerJuego, terminarJuego } = require('../../lib/juegos');
 const { caja, porCategoria } = require('../../lib/estilo');
 const { OPCIONES, registrarJugadaPPT, jugadorDelMensaje } = require('../../lib/ppt');
-const { mismaPersona, idsDeRemitente } = require('../../lib/identidad');
+const { mismoNumero, idsDeRemitente } = require('../../lib/identidad');
 
 const DURACION_MS = 5 * 60 * 1000;
 
@@ -24,7 +24,8 @@ module.exports = {
       });
     }
 
-    if (await mismaPersona(sock, jid, mencionado, idsDeRemitente(msg))) {
+    // Comparacion rapida (sin consultar al grupo): retar a alguien no debe demorar el duelo
+    if (mismoNumero(mencionado, idsDeRemitente(msg))) {
       return sock.sendMessage(jid, {
         text: caja(['No puedes retarte a ti mismo 😅'], { titulo: 'PPT', estilo })
       });
@@ -77,20 +78,28 @@ module.exports = {
       { text: '✂️ Tijera', id: `${prefix}pptjugar tijera` }
     ];
 
-    await sock.sendMessage(jid, {
-      text: caja(
-        [
-          `🥊 @${jugador1.split('@')[0]}  🆚  @${jugador2.split('@')[0]}`,
-          '',
-          'Toca tu jugada 👇',
-          'O escribela: piedra / papel / tijera',
-          'El resultado se revela cuando los 2 hayan elegido.'
-        ],
-        { titulo: '⚔️ DUELO PPT', estilo }
-      ),
-      mentions: [jugador1, jugador2],
-      footer: 'ALEPANDA BOT',
-      buttons: botones
-    });
+    const armarTexto = (conBotones) => caja(
+      [
+        `🥊 @${jugador1.split('@')[0]}  🆚  @${jugador2.split('@')[0]}`,
+        '',
+        conBotones ? 'Toca tu jugada 👇' : 'Escribe tu jugada: piedra / papel / tijera',
+        ...(conBotones ? ['O escribela: piedra / papel / tijera'] : []),
+        'El resultado se revela cuando los 2 hayan elegido.'
+      ],
+      { titulo: '⚔️ DUELO PPT', estilo }
+    );
+
+    try {
+      await sock.sendMessage(jid, { text: armarTexto(true), mentions: [jugador1, jugador2], footer: 'ALEPANDA BOT', buttons: botones });
+    } catch (err) {
+      // Si los botones fallan, el duelo se manda en texto (se juega escribiendo piedra / papel / tijera)
+      console.error('[ppt] No pude mandar los botones, mando solo texto:', err && err.message ? err.message : err);
+      try {
+        await sock.sendMessage(jid, { text: armarTexto(false), mentions: [jugador1, jugador2] });
+      } catch (err2) {
+        terminarJuego(jid); // para que el chat no se quede con un duelo que nadie vio
+        throw err2;
+      }
+    }
   }
 };
