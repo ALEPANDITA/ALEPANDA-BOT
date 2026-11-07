@@ -1,11 +1,39 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
-const { mismoUsuario } = require('../../lib/permisos');
+const { mismaPersona, mismoNumero, idsDeRemitente } = require('../../lib/identidad');
 const { verificarGanador, verificarEmpate, jugadaBot, dibujarTablero } = require('../../lib/tresenraya');
 const { error: cajaError, advertencia, lista } = require('../../lib/estilo');
 
 const PUNTOS_POR_VICTORIA = 5;
 
 global.__ticTacToe = global.__ticTacToe || {};
+
+const INACTIVIDAD_MS = 15 * 60 * 1000; // una partida sin jugadas por 15 min se descarta sola
+
+function partidaDe(jid) {
+  const game = global.__ticTacToe[jid];
+  if (game && Date.now() - (game.ultimaJugada || game.createdAt || 0) > INACTIVIDAD_MS) {
+    delete global.__ticTacToe[jid];
+    return null;
+  }
+  return game || null;
+}
+
+// ¿Quien escribio el mensaje: 'X', 'O' o nadie? Aguanta que el mismo usuario llegue como numero o como @lid
+// (se compara primero rapido por numero y, si no, con la ficha del grupo). Lo que aprende lo recuerda en la partida.
+async function jugadorDe(sock, jid, msg, game) {
+  const ids = idsDeRemitente(msg);
+  const simbolos = game.vsBot ? ['X'] : ['X', 'O'];
+  game.alias = game.alias || { X: [], O: [] };
+  const conocidos = (s) => [game.players[s], ...game.alias[s]];
+  for (const s of simbolos) if (mismoNumero(conocidos(s), ids)) return s;
+  for (const s of simbolos) {
+    if (await mismaPersona(sock, jid, conocidos(s), ids)) {
+      game.alias[s].push(...ids);
+      return s;
+    }
+  }
+  return null;
+}
 
 function otorgarPuntos(ganadorJid) {
   if (!ganadorJid || ganadorJid === 'bot') return;
@@ -47,6 +75,27 @@ async function enviarTablero(sock, jid, game) {
   return false;
 }
 
+// Pone la ficha del jugador en turno, revisa si termino y, contra el bot, juega el turno del bot
+async function jugarCasilla(sock, jid, game, idx) {
+  if (game.board[idx] !== null) {
+    return sock.sendMessage(jid, { text: advertencia('Esa casilla ya esta ocupada.', { titulo: '3 EN RAYA' }) });
+  }
+
+  game.board[idx] = game.turn;
+  game.turn = game.turn === 'X' ? 'O' : 'X';
+  game.ultimaJugada = Date.now();
+
+  const terminado = await enviarTablero(sock, jid, game);
+  if (terminado) return;
+
+  if (game.vsBot && game.turn === 'O') {
+    const botIdx = jugadaBot(game.board, 'O', 'X');
+    game.board[botIdx] = 'O';
+    game.turn = 'X';
+    await enviarTablero(sock, jid, game);
+  }
+}
+
 module.exports = {
   name: '3raya',
   aliases: ['triqui', 'gato', 'tresenraya'],
@@ -57,7 +106,7 @@ module.exports = {
     const remitente = msg.key.participant || msg.key.remoteJid;
     const partes = texto.trim().split(/\s+/).slice(1);
     const input = (partes[0] || '').toLowerCase();
-    const game = global.__ticTacToe[jid];
+    const game = partidaDe(jid);
 
     // Sin argumentos: muestra el tablero actual o el menu de ayuda
     if (!input) {
@@ -79,14 +128,12 @@ module.exports = {
         return sock.sendMessage(jid, { text: advertencia('No hay ninguna partida activa en este chat.', { titulo: '3 EN RAYA' }) });
       }
 
-      const esJugadorX = mismoUsuario(game.players.X, remitente);
-      const esJugadorO = !game.vsBot && mismoUsuario(game.players.O, remitente);
-
-      if (!esJugadorX && !esJugadorO) {
+      const quien = await jugadorDe(sock, jid, msg, game);
+      if (!quien) {
         return sock.sendMessage(jid, { text: advertencia('No eres parte de esta partida.', { titulo: '3 EN RAYA' }) });
       }
 
-      const ganadorJid = esJugadorX ? game.players.O : game.players.X;
+      const ganadorJid = quien === 'X' ? game.players.O : game.players.X;
       otorgarPuntos(ganadorJid);
       delete global.__ticTacToe[jid];
 
@@ -108,7 +155,7 @@ module.exports = {
       }
 
       const vsBot = input === 'bot';
-      if (!vsBot && mismoUsuario(mencionado, remitente)) {
+      if (!vsBot && await mismaPersona(sock, jid, mencionado, idsDeRemitente(msg))) {
         return sock.sendMessage(jid, { text: advertencia('No puedes retarte a ti mismo.', { titulo: '3 EN RAYA' }) });
       }
 
@@ -117,7 +164,8 @@ module.exports = {
         turn: 'X',
         players: { X: remitente, O: vsBot ? 'bot' : mencionado },
         vsBot,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        ultimaJugada: Date.now()
       };
 
       return enviarTablero(sock, jid, global.__ticTacToe[jid]);
@@ -135,34 +183,28 @@ module.exports = {
       });
     }
 
-    const esJugadorX = mismoUsuario(game.players.X, remitente);
-    const esJugadorO = !game.vsBot && mismoUsuario(game.players.O, remitente);
-
-    if (!esJugadorX && !esJugadorO) {
+    const simboloJugador = await jugadorDe(sock, jid, msg, game);
+    if (!simboloJugador) {
       return sock.sendMessage(jid, { text: advertencia('No eres parte de esta partida.', { titulo: '3 EN RAYA' }) });
     }
 
-    const simboloJugador = esJugadorX ? 'X' : 'O';
     if (game.turn !== simboloJugador) {
       return sock.sendMessage(jid, { text: advertencia('No es tu turno.', { titulo: '3 EN RAYA' }) });
     }
 
-    const idx = pos - 1;
-    if (game.board[idx] !== null) {
-      return sock.sendMessage(jid, { text: advertencia('Esa casilla ya esta ocupada.', { titulo: '3 EN RAYA' }) });
-    }
+    await jugarCasilla(sock, jid, game, pos - 1);
+  },
 
-    game.board[idx] = simboloJugador;
-    game.turn = game.turn === 'X' ? 'O' : 'X';
-
-    const terminado = await enviarTablero(sock, jid, game);
-    if (terminado) return;
-
-    if (game.vsBot && game.turn === 'O') {
-      const botIdx = jugadaBot(game.board, 'O', 'X');
-      game.board[botIdx] = 'O';
-      game.turn = 'X';
-      await enviarTablero(sock, jid, game);
-    }
+  // Jugada escrita sin el comando: con una partida activa basta con mandar el numero (1-9) o responder con el. Lo llama
+  // index.js con cada mensaje de texto sin prefijo. Devuelve true solo si el mensaje era una jugada (asi no se come
+  // otros mensajes: solo cuenta si quien escribe es jugador de la partida y es su turno).
+  manejarNumeroSuelto: async (sock, jid, msg, texto) => {
+    if (!/^[1-9]$/.test(String(texto || '').trim())) return false;
+    const game = partidaDe(jid);
+    if (!game) return false;
+    const simbolo = await jugadorDe(sock, jid, msg, game);
+    if (!simbolo || game.turn !== simbolo) return false;
+    await jugarCasilla(sock, jid, game, parseInt(texto.trim(), 10) - 1);
+    return true;
   }
 };
