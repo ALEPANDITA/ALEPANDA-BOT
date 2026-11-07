@@ -72,34 +72,43 @@ module.exports = {
       }
     });
 
-    const botones = [
-      { text: '🪨 Piedra', id: `${prefix}pptjugar piedra` },
-      { text: '📄 Papel', id: `${prefix}pptjugar papel` },
-      { text: '✂️ Tijera', id: `${prefix}pptjugar tijera` }
-    ];
-
-    const armarTexto = (conBotones) => caja(
-      [
-        `🥊 @${jugador1.split('@')[0]}  🆚  @${jugador2.split('@')[0]}`,
-        '',
-        conBotones ? 'Toca tu jugada 👇' : 'Escribe tu jugada: piedra / papel / tijera',
-        ...(conBotones ? ['O escribela: piedra / papel / tijera'] : []),
-        'El resultado se revela cuando los 2 hayan elegido.'
-      ],
-      { titulo: '⚔️ DUELO PPT', estilo }
-    );
+    // OJO: los "buttons" normales de sock.sendMessage no se ven en WhatsApp (el mensaje se manda sin error pero no aparece;
+    // ver el comentario en ytsearch.js). Por eso el duelo SIEMPRE sale como texto normal (se juega escribiendo piedra / papel /
+    // tijera) y los botones van aparte, solo si esta instalado baileys_helper (el mismo que usa .ytsearch).
+    try {
+      await sock.sendMessage(jid, {
+        text: caja(
+          [
+            `🥊 @${jugador1.split('@')[0]}  🆚  @${jugador2.split('@')[0]}`,
+            '',
+            'Escribe tu jugada: piedra / papel / tijera',
+            'El resultado se revela cuando los 2 hayan elegido.',
+            `(Para salir sin esperar, escribe: cancelar)`
+          ],
+          { titulo: '⚔️ DUELO PPT', estilo }
+        ),
+        mentions: [jugador1, jugador2]
+      });
+    } catch (err) {
+      terminarJuego(jid); // para que el chat no se quede con un duelo que nadie vio
+      throw err;
+    }
 
     try {
-      await sock.sendMessage(jid, { text: armarTexto(true), mentions: [jugador1, jugador2], footer: 'ALEPANDA BOT', buttons: botones });
+      const { sendButtons } = require('baileys_helper');
+      const boton = (texto, id) => ({ name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: texto, id }) });
+      await sendButtons(sock, jid, {
+        text: 'Toca tu jugada 👇',
+        footer: 'ALEPANDA BOT',
+        buttons: [
+          boton('🪨 Piedra', `${prefix}pptjugar piedra`),
+          boton('📄 Papel', `${prefix}pptjugar papel`),
+          boton('✂️ Tijera', `${prefix}pptjugar tijera`)
+        ]
+      });
     } catch (err) {
-      // Si los botones fallan, el duelo se manda en texto (se juega escribiendo piedra / papel / tijera)
-      console.error('[ppt] No pude mandar los botones, mando solo texto:', err && err.message ? err.message : err);
-      try {
-        await sock.sendMessage(jid, { text: armarTexto(false), mentions: [jugador1, jugador2] });
-      } catch (err2) {
-        terminarJuego(jid); // para que el chat no se quede con un duelo que nadie vio
-        throw err2;
-      }
+      // Sin botones no pasa nada: el duelo ya se puede jugar escribiendo
+      if (!/Cannot find module/.test(String(err && err.message))) console.warn('[ppt] No pude mandar los botones:', err && err.message ? err.message : err);
     }
   }
 };
