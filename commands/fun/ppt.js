@@ -1,6 +1,7 @@
 const { iniciarJuego, obtenerJuego, terminarJuego } = require('../../lib/juegos');
 const { caja, porCategoria } = require('../../lib/estilo');
-const { OPCIONES, registrarJugadaPPT } = require('../../lib/ppt');
+const { OPCIONES, registrarJugadaPPT, jugadorDelMensaje } = require('../../lib/ppt');
+const { mismaPersona, idsDeRemitente } = require('../../lib/identidad');
 
 const DURACION_MS = 5 * 60 * 1000;
 
@@ -23,7 +24,7 @@ module.exports = {
       });
     }
 
-    if (mencionado === jugador1) {
+    if (await mismaPersona(sock, jid, mencionado, idsDeRemitente(msg))) {
       return sock.sendMessage(jid, {
         text: caja(['No puedes retarte a ti mismo 😅'], { titulo: 'PPT', estilo })
       });
@@ -54,10 +55,9 @@ module.exports = {
       // escrita a mano (piedra/papel/tijera) por si los botones no se ven
       // en algun dispositivo -- y "cancelar" para salir sin esperar.
       manejarRespuesta: async (sock, jid, msg, textoResp) => {
-        const remitente = msg.key.participant || msg.key.remoteJid;
         const palabra = textoResp.trim().toLowerCase();
 
-        if (palabra === 'cancelar' && [jugador1, jugador2].includes(remitente)) {
+        if (palabra === 'cancelar' && await jugadorDelMensaje(sock, jid, msg, [jugador1, jugador2])) {
           terminarJuego(jid);
           await sock.sendMessage(jid, {
             text: caja(['El duelo fue cancelado.'], { titulo: 'PPT CANCELADO', estilo })
@@ -66,7 +66,7 @@ module.exports = {
         }
 
         if (OPCIONES[palabra]) {
-          await registrarJugadaPPT(sock, jid, remitente, palabra);
+          await registrarJugadaPPT(sock, jid, msg, palabra);
         }
       }
     });

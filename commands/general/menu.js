@@ -1,6 +1,7 @@
 const { leerConfig } = require('../../lib/config');
 const { halloweenActivo, caja } = require('../../lib/estilo');
 const { esComandoOwner } = require('../../lib/menuowner');
+const { esComandoNsfw } = require('../../lib/nsfw');
 const fs = require('fs');
 const path = require('path');
 
@@ -215,8 +216,17 @@ module.exports = {
     const categorias = {};
     const emojiComando = leerConfig().menuEmoji || "🪄";
 
+    // Los comandos NSFW solo salen en el menu donde se pueden usar (grupo con NSFW activado; en privado, solo para owners)
+    let ocultarNsfw = true;
+    try {
+      const { grupoTieneNsfw } = require('../../lib/nsfw');
+      const { esOwnerBot: esOwnerMenu } = require('../../lib/permisos');
+      ocultarNsfw = String(jid).endsWith('@g.us') ? !grupoTieneNsfw(jid) : !(await esOwnerMenu(sock, leerConfig(), msg));
+    } catch (_) { ocultarNsfw = true; }
+
     for (const comando of comandos.values()) {
       if (esComandoOwner(comando)) continue; // los de owner van en .menuowner
+      if (ocultarNsfw && esComandoNsfw(comando)) continue;
       const cat = comando.category || 'general';
       if (!categorias[cat]) categorias[cat] = [];
       if (!categorias[cat].some((c) => c.name === comando.name)) {

@@ -123,6 +123,12 @@ console.log('📦 Cargando comandos...');
 const comandos = cargarComandos();
 console.log(`✅ ${comandos.size} comandos/alias cargados sin errores.`);
 
+// NSFW: la primera vez que arranca con este cambio se apaga en todos los grupos (solo vuelve donde un owner use .tnsfw on)
+try {
+  const gruposApagados = require('./lib/nsfw').apagarNsfwUnaVez();
+  if (gruposApagados) console.log(`🔞 NSFW apagado en ${gruposApagados} grupo(s) que lo tenían activo. Un owner lo vuelve a activar con .tnsfw on`);
+} catch (err) { console.error('[nsfw] No pude apagar el NSFW de los grupos:', err && err.message ? err.message : err); }
+
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const pregunta = (texto) => new Promise((resolve) => rl.question(texto, resolve));
 
@@ -574,6 +580,7 @@ async function startBot() {
       const [comandoBoton, urlBoton] = botonId.split('|');
       const comandoEncontrado = comandos.get(normalizarComando(comandoBoton));
       if (comandoEncontrado) {
+        if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comandoEncontrado, { prefix }))) return;
         const textoFalso = `${prefix}${comandoBoton} ${urlBoton}`;
         try {
           await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
@@ -606,6 +613,7 @@ async function startBot() {
       const nombreComandoSel = argsSel[0];
       const comandoSel = comandos.get(normalizarComando(nombreComandoSel));
       if (comandoSel) {
+        if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comandoSel, { prefix }))) return;
         try {
           await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
           await comandoSel.execute(sock, jid, msg, { prefix, texto: idSeleccionado, comandos });
@@ -739,6 +747,14 @@ async function startBot() {
       return;
     }
 
+    // 3 en raya (.gato): con una partida activa, mandar solo el numero (1-9) o responder con el ya es una jugada
+    try {
+      if (texto && esGrupo && !texto.startsWith(prefix)) {
+        const tresRaya = comandos.get('3raya');
+        if (tresRaya && tresRaya.manejarNumeroSuelto && await tresRaya.manejarNumeroSuelto(sock, jid, msg, texto)) return;
+      }
+    } catch (err) { console.error('[3raya]', err); }
+
     // Responder a un mensaje de Simi/Panda/Simon/Cupido sin escribir el comando
     try {
       if (texto && !texto.startsWith(prefix) && require('./lib/iaRespuestas').manejarRespuestaCitada({ sock, jid, msg, texto })) return;
@@ -801,13 +817,8 @@ async function startBot() {
       }
     }
 
-    if (esGrupo && comando.category === 'nsfw') {
-      const dbNsfw = leerDB();
-      const grupoNsfw = getGrupo(dbNsfw, jid);
-      if (!grupoNsfw.nsfw) {
-        return sock.sendMessage(jid, { text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.` }, { quoted: msg });
-      }
-    }
+    // NSFW (categorias nsfw / nsfw2 y comandos marcados): apagado por defecto, solo mayores de 18 registrados, ver lib/nsfw.js
+    if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comando, { prefix }))) return;
 
     try {
       const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
