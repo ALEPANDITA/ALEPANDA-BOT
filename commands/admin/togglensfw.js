@@ -15,6 +15,10 @@ module.exports = {
       // Solo un owner decide si un grupo tiene NSFW (igual en subbots, que no revisan silencioNoOwner)
       if (!(await esOwnerBot(sock, leerConfig(), msg))) return;
 
+      // Un menor de 18 registrado no puede activarlo ni desactivarlo
+      const nsfw = require('../../lib/nsfw');
+      if (await nsfw.esMenorRegistrado(sock, jid, msg)) return await sock.sendMessage(jid, { text: nsfw.TEXTO_MENOR }, { quoted: msg });
+
       if (!jid.endsWith('@g.us')) {
         return await sock.sendMessage(jid, { text: advertencia('Este comando solo se puede usar dentro de un grupo.') });
       }

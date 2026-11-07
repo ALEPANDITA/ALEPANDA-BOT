@@ -18,6 +18,8 @@ module.exports = {
       const { esOwnerBot } = require('../../lib/permisos');
       const { leerConfig } = require('../../lib/config');
       if (!(await esOwnerBot(sock, leerConfig(), msg))) return;
+      const nsfw = require('../../lib/nsfw');
+      if (await nsfw.esMenorRegistrado(sock, jid, msg)) return await sock.sendMessage(jid, { text: nsfw.TEXTO_MENOR }, { quoted: msg });
     }
 
     const esAdmin = await esAdminDelGrupo(sock, jid, remitente);
