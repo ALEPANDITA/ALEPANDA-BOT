@@ -2,6 +2,7 @@
 //   .boton                    Pandita (activa/desactiva)       .boton mei        Mei (activa/desactiva)
 //   .boton on | off           Pandita                          .boton mei on|off Mei
 //   .boton estado             cual esta activa aqui
+//   .boton diagnostico        (owner) por que una IA no contesta en este chat
 //   .boton memoria            ayuda y conteo                   .boton memoria ver | borrar [todo]
 //   Tambien: .boton mei memoria ver / borrar   (la memoria de cada una es aparte)
 // Activar / desactivar: SOLO un owner del bot (en privado y en grupos). Ver estado y la memoria propia: cualquiera.
@@ -9,6 +10,10 @@
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot, esAdminDelGrupo } = require('../../lib/permisos');
 const { porId, TODAS, activar } = require('../../lib/ia-personas');
+const { leerDB, getGrupo } = require('../../lib/db');
+const apagados = require('../../lib/apagados');
+const voz = require('../../lib/ia-voz');
+const { getApiKeys } = require('../../lib/apikeys');
 
 module.exports = {
   name: 'boton',
@@ -39,6 +44,39 @@ module.exports = {
 
     if (args[0] === 'estado') {
       return responder('🤖 *IAs en este chat*\n' + TODAS.map((p) => `${p.def.emoji} ${p.nombre}: ${p.estaActiva(jid) ? '✅ activa' : '⛔ apagada'}  (${prefix}boton${p.id === 'pandita' ? '' : ' ' + p.id})`).join('\n'));
+    }
+
+    if (['diagnostico', 'diag', 'debug'].includes(args[0])) {
+      if (!(await esOwnerBot(sock, leerConfig(), msg))) return responder('🔒 Solo un owner del bot puede ver el diagnóstico.');
+      const hace = (ts) => {
+        if (!ts) return 'nunca (desde el último reinicio)';
+        const seg = Math.round((Date.now() - ts) / 1000);
+        return seg < 90 ? `hace ${seg} s` : seg < 5400 ? `hace ${Math.round(seg / 60)} min` : `hace ${Math.round(seg / 3600)} h`;
+      };
+      const lineas = ['🔎 *DIAGNÓSTICO DE ESTE CHAT*', esGrupo ? 'Tipo: grupo' : 'Tipo: privado'];
+      if (esGrupo) {
+        const g = getGrupo(leerDB(), jid);
+        lineas.push(`Bot apagado aquí (.apagar): ${apagados.estaApagado(jid) ? '⛔ SÍ → no responde nada hasta que un owner use .encender' : 'no ✅'}`);
+        lineas.push(`Modo solo-admins (.modoadmin): ${g.soloAdmins ? '🔒 sí → solo admins y owners le pueden hablar' : 'no ✅'}`);
+        lineas.push(`Prefijo del grupo: ${g.prefix || leerConfig().prefix || '.'}`);
+      }
+      for (const p of TODAS) {
+        const d = p.diagnostico(jid);
+        const el = p.id === 'mei' ? 'ella' : 'él';
+        lineas.push('', `${p.def.emoji} *${p.nombre}*: ${d.activa ? '✅ activa' : '⛔ apagada en este chat'}`);
+        if (!d.activa) continue;
+        if (esGrupo) lineas.push(`  Se le llama con *@${p.nombre}* o respondiendo a un mensaje suyo`);
+        lineas.push(`  Último mensaje que le llegó: ${hace(d.visto && d.visto.ts)}${d.visto ? (d.visto.dirigido ? ` — era para ${el} ✅` : ` — NO iba dirigido a ${el}`) : ''}`);
+        if (d.visto && !d.visto.dirigido && d.visto.snippet) lineas.push(`  Así lo vio el bot: "${d.visto.snippet}"`);
+        lineas.push(`  Última respuesta: ${hace(d.exitoTs)}`);
+        if (d.rechazo) lineas.push(`  Último motivo por el que NO contestó: ${d.rechazo.motivo} (${hace(d.rechazo.ts)})`);
+        if (esGrupo) lineas.push(`  Personas hablando ahora: ${d.activosAhora}/${p.MAX_ACTIVOS_GRUPO}`);
+      }
+      const e = voz.estado();
+      lineas.push('', `IA (Gemini): ${getApiKeys('gemini').length} clave(s)`);
+      lineas.push('Voz: ' + TODAS.map((p) => `${p.nombre} ${voz.disponible(p.id) ? '✅' : '⚠️ texto'}`).join(' · ') + (!e.activo ? ' (voz apagada con .voz off)' : !e.claves ? ' (falta la clave de ElevenLabs)' : e.enPausaHasta ? ' (en pausa por créditos: .voz reanudar)' : ''));
+      lineas.push('', `Cómo usarlo: en el grupo que falla manda "@Mei hola" (o "@Pandita hola") y enseguida escribe ${prefix}boton diagnostico. Si "Último mensaje que le llegó" no cambió, algo ANTES de la IA lo está frenando (grupo apagado, usuario muteado o bloqueado, antiflood/antispam). Si cambió y dice que no iba dirigido, la mención no se reconoció.`);
+      return responder(lineas.join('\n'));
     }
 
     if (args[0] === 'memoria') {
