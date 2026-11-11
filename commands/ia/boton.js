@@ -4,6 +4,7 @@
 //   .boton estado             cual esta activa aqui
 //   .boton memoria            ayuda y conteo                   .boton memoria ver | borrar [todo]
 //   Tambien: .boton mei memoria ver / borrar   (la memoria de cada una es aparte)
+// Activar / desactivar: SOLO un owner del bot (en privado y en grupos). Ver estado y la memoria propia: cualquiera.
 // En un grupo pueden estar las dos a la vez (cada una contesta a su @mencion). En privado solo una a la vez.
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot, esAdminDelGrupo } = require('../../lib/permisos');
@@ -79,8 +80,9 @@ module.exports = {
       return responder(`Uso:\n${prefix}boton (Pandita)   ${prefix}boton mei (Mei)\n${comando} on | off\n${comando} memoria | memoria ver | memoria borrar\n${prefix}boton estado`);
     }
 
-    if (!(await puedeAdministrar())) {
-      return responder(`Solo admins del grupo (o owners) pueden activar o desactivar a ${D.nombre}.`);
+    // Prender y apagar a las IAs es solo de los owners (gastan creditos de voz y de IA)
+    if (!(await esOwnerBot(sock, leerConfig(), msg))) {
+      return responder(`🔒 Solo un owner del bot puede activar o desactivar a ${D.nombre}.`);
     }
 
     let nuevo;
