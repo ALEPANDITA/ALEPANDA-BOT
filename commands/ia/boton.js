@@ -70,6 +70,7 @@ module.exports = {
         if (d.visto && !d.visto.dirigido && d.visto.snippet) lineas.push(`  Así lo vio el bot: "${d.visto.snippet}"`);
         lineas.push(`  Última respuesta: ${hace(d.exitoTs)}`);
         if (d.rechazo) lineas.push(`  Último motivo por el que NO contestó: ${d.rechazo.motivo} (${hace(d.rechazo.ts)})`);
+        if (d.problemaMedio) lineas.push(`  Último problema con fotos/stickers/audios/PDF: ${d.problemaMedio.detalle} (${hace(d.problemaMedio.ts)})`);
         if (esGrupo) lineas.push(`  Personas hablando ahora: ${d.activosAhora}/${p.MAX_ACTIVOS_GRUPO}`);
       }
       const e = voz.estado();
