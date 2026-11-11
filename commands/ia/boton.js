@@ -1,20 +1,28 @@
-// .boton -> activa/desactiva a Pandita en ESTE chat (por defecto desactivada).
-// .boton on | off          -> forzar estado
-// .boton memoria           -> ayuda y conteo
-// .boton memoria ver       -> ver lo que Pandita recuerda (tuyo en este chat + del grupo)
-// .boton memoria borrar    -> borra TU memoria en este chat (admins: "borrar todo" borra la del chat)
+// .boton -> activa/desactiva a las IAs con voz en ESTE chat (por defecto desactivadas).
+//   .boton                    Pandita (activa/desactiva)       .boton mei        Mei (activa/desactiva)
+//   .boton on | off           Pandita                          .boton mei on|off Mei
+//   .boton estado             cual esta activa aqui
+//   .boton memoria            ayuda y conteo                   .boton memoria ver | borrar [todo]
+//   Tambien: .boton mei memoria ver / borrar   (la memoria de cada una es aparte)
+// En un grupo pueden estar las dos a la vez (cada una contesta a su @mencion). En privado solo una a la vez.
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot, esAdminDelGrupo } = require('../../lib/permisos');
-const P = require('../../lib/pandita');
+const { porId, TODAS, activar } = require('../../lib/ia-personas');
 
 module.exports = {
   name: 'boton',
   category: 'ia',
-  description: 'Activa/desactiva a Pandita en este chat. Subcomandos: memoria, memoria ver, memoria borrar',
+  description: 'Activa/desactiva a Pandita (.boton) o a Mei (.boton mei) en este chat. Subcomandos: memoria, memoria ver, memoria borrar, estado',
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const esGrupo = jid.endsWith('@g.us');
-    const args = texto.slice(prefix.length).trim().split(/\s+/).slice(1).map((a) => a.toLowerCase());
+    let args = texto.slice(prefix.length).trim().split(/\s+/).slice(1).map((a) => a.toLowerCase());
     const responder = (t) => sock.sendMessage(jid, { text: t }, { quoted: msg });
+
+    // Cual IA: "mei" / "pandita" al principio; sin nombre es Pandita (como siempre)
+    let P = porId('pandita');
+    if (args[0] && porId(args[0])) { P = porId(args[0]); args = args.slice(1); }
+    const D = P.def;
+    const comando = P.id === 'pandita' ? `${prefix}boton` : `${prefix}boton ${P.id}`;
 
     const metadata = esGrupo ? await sock.groupMetadata(jid).catch(() => null) : null;
     const uid = await P.idUsuario(sock, jid, msg, metadata);
@@ -27,6 +35,10 @@ module.exports = {
       const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
       return esAdmin || (await esOwnerBot(sock, leerConfig(), msg));
     };
+
+    if (args[0] === 'estado') {
+      return responder('🤖 *IAs en este chat*\n' + TODAS.map((p) => `${p.def.emoji} ${p.nombre}: ${p.estaActiva(jid) ? '✅ activa' : '⛔ apagada'}  (${prefix}boton${p.id === 'pandita' ? '' : ' ' + p.id})`).join('\n'));
+    }
 
     if (args[0] === 'memoria') {
       const sub = args[1];
@@ -56,19 +68,19 @@ module.exports = {
 
       const c = P.contarMemoria(jid, uid);
       return responder(
-        `🧠 *Memoria de Pandita* (separada por chat)\n` +
+        `🧠 *Memoria de ${D.nombre}* (separada por chat)\n` +
         `Recuerdo ${c.usuario} cosa(s) de ti` + (esGrupo ? ` y ${c.grupo} del grupo` : '') + `.\n\n` +
-        `${prefix}boton memoria ver\n${prefix}boton memoria borrar` + (esGrupo ? `\n${prefix}boton memoria borrar todo (admins)` : '') +
+        `${comando} memoria ver\n${comando} memoria borrar` + (esGrupo ? `\n${comando} memoria borrar todo (admins)` : '') +
         `\n\nLa memoria no se borra sola ni al reiniciar el bot.`
       );
     }
 
     if (args.length && !['on', 'off', 'activar', 'desactivar'].includes(args[0])) {
-      return responder(`Uso:\n${prefix}boton (activa/desactiva)\n${prefix}boton on | off\n${prefix}boton memoria | memoria ver | memoria borrar`);
+      return responder(`Uso:\n${prefix}boton (Pandita)   ${prefix}boton mei (Mei)\n${comando} on | off\n${comando} memoria | memoria ver | memoria borrar\n${prefix}boton estado`);
     }
 
     if (!(await puedeAdministrar())) {
-      return responder('Solo admins del grupo (o owners) pueden activar o desactivar a Pandita.');
+      return responder(`Solo admins del grupo (o owners) pueden activar o desactivar a ${D.nombre}.`);
     }
 
     let nuevo;
@@ -76,13 +88,12 @@ module.exports = {
     else if (['off', 'desactivar'].includes(args[0])) nuevo = false;
     else nuevo = !P.estaActiva(jid);
 
-    P.setActiva(jid, nuevo);
+    const apagadas = activar(P, jid, nuevo);
 
     if (nuevo) {
-      return responder(esGrupo
-        ? `🎀 *Pandita activada* en este grupo ✨\nLlamala con *@Pandita* o respondiendo a uno de sus mensajes. Si nadie la llama, se queda calladita 🐼`
-        : `🎀 *Pandita activada* ✨\nHablame normal, sin prefijo. Por ejemplo: "hola Pandita" 🐼`);
+      const aviso = apagadas.length ? `\n(${apagadas.map((p) => p.nombre).join(' y ')} se apagó en este chat privado: aquí solo puede haber una a la vez)` : '';
+      return responder((esGrupo ? D.textos.activadaGrupo : D.textos.activadaPrivado) + aviso);
     }
-    return responder('🐼 *Pandita desactivada* en este chat. Lo que recuerda se queda guardado.');
+    return responder(D.textos.desactivada);
   }
 };

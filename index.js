@@ -762,11 +762,10 @@ async function startBot() {
       console.error('[iaRespuestas]', err);
     }
 
-    // PANDITA: IA independiente (solo actua si esta activada con .boton en este chat)
+    // PANDITA y MEI: IAs con voz, imagenes, audios y PDFs (solo actuan si estan activadas con .boton en este chat)
     try {
-      const pandita = require('./lib/pandita');
-      if (await pandita.manejarMensaje({ sock, jid, msg, texto, esGrupo, prefix, comandos, obtenerMetadata: obtenerMetadataCacheada })) return;
-    } catch (e) { console.error('[pandita] hook:', e); }
+      if (await require('./lib/ia-personas').manejarMensaje({ sock, jid, msg, texto, esGrupo, prefix, comandos, obtenerMetadata: obtenerMetadataCacheada })) return;
+    } catch (e) { console.error('[ia-personas] hook:', e); }
 
     if (!texto.startsWith(prefix)) return;
 
