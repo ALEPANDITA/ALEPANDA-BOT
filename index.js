@@ -430,6 +430,9 @@ async function startBot() {
     const msg = messages[0];
     if (!msg.message || msg.key.fromMe) return;
 
+    // .ver: recuerda (solo la referencia, no el archivo) los mensajes de "ver una vez" que llegan
+    try { const vu = require('./lib/vistaunica'); for (const m of messages) if (!m.key.fromMe) vu.recordar(m); } catch (e) { /* no estorba al resto del bot */ }
+
     const config = leerConfig();
     const jid = msg.key.remoteJid;
     const texto = (
