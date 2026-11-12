@@ -10,6 +10,8 @@
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot, esAdminDelGrupo } = require('../../lib/permisos');
 const { porId, TODAS, activar } = require('../../lib/ia-personas');
+const { esDuenoDelBot } = require('../../lib/ia-persona');
+const { perfilPorId, idsDeMensaje } = require('../../lib/registro');
 const { leerDB, getGrupo } = require('../../lib/db');
 const apagados = require('../../lib/apagados');
 const voz = require('../../lib/ia-voz');
@@ -72,6 +74,15 @@ module.exports = {
         if (d.rechazo) lineas.push(`  Último motivo por el que NO contestó: ${d.rechazo.motivo} (${hace(d.rechazo.ts)})`);
         if (d.problemaMedio) lineas.push(`  Último problema con fotos/stickers/audios/PDF: ${d.problemaMedio.detalle} (${hace(d.problemaMedio.ts)})`);
         if (esGrupo) lineas.push(`  Personas hablando ahora: ${d.activosAhora}/${p.MAX_ACTIVOS_GRUPO}`);
+      }
+      // Modo novia de Mei: solo se muestra si quien pregunta es el desarrollador del bot
+      const mei = porId('mei');
+      if (mei.def.modoNovia && (await esDuenoDelBot(sock, msg, uid))) {
+        let perfilD = null;
+        for (const id of [uid, ...idsDeMensaje(msg, jid)]) { perfilD = perfilPorId(id); if (perfilD) break; }
+        lineas.push('', perfilD && perfilD.edad >= 18
+          ? '💗 Modo novia: ✅ Mei te habla de novia a ti (en grupos, más discreta); a los demás, normal'
+          : `💗 Modo novia: ⚠️ te reconoce como dueño, pero no estás registrado con 18+ años → te trata como amigo. Usa ${prefix}registrar`);
       }
       const e = voz.estado();
       lineas.push('', `IA (Gemini): ${getApiKeys('gemini').length} clave(s)`);
