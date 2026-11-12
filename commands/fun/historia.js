@@ -7,6 +7,9 @@
 const historia = require('../../lib/historia');
 const medios = require('../../lib/ia-medios');
 const { error: cajaError } = require('../../lib/estilo');
+const gemini = require('../../lib/gemini');
+const { leerConfig } = require('../../lib/config');
+const { esOwnerBot } = require('../../lib/permisos');
 
 const ESPERA_MS = 25 * 1000;
 const ultimaVez = new Map();    // grupo -> cuando se uso
@@ -73,10 +76,18 @@ module.exports = {
         while (guardadas.size > MAX_GUARDADAS) guardadas.delete(guardadas.keys().next().value);
       }
     } catch (err) {
-      console.error('[historia]', err && (err.code || err.message));
+      console.error('[historia]', err && (err.code || err.message), err && err.detalle ? `| ${err.detalle}` : '');
       await responder(cajaError(err && err.code === 'HISTORIA_INVALIDA'
         ? 'Se me enredó la historia, intenta otra vez.'
         : 'Se me fue la inspiración, intenta de nuevo en un ratito.'));
+      // Al owner se le dice por que fallo (cupo de Gemini, Groq, etc.)
+      try {
+        if (await esOwnerBot(sock, leerConfig(), msg)) {
+          const real = typeof gemini.ultimoErrorGemini === 'function' ? gemini.ultimoErrorGemini() : null;
+          const motivo = (err && (err.detalle || err.message)) || 'desconocido';
+          await sock.sendMessage(jid, { text: `🔧 Detalle (solo owner): ${String(motivo).slice(0, 450)}${real && !/Gemini/.test(String(motivo)) ? ` | Gemini: ${real.mensaje.slice(0, 120)}` : ''}` }, { quoted: msg });
+        }
+      } catch (_) { /* sin detalle */ }
     } finally {
       escribiendo.delete(jid);
     }
