@@ -32,7 +32,7 @@ function obtenerBufferMenu(jid) {
 }
 
 // 'owner' ya no va aqui: los comandos de owner solo salen en .menuowner
-const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
+const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'arcade', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
 
 // Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
 const MAX_PAGINAS_ALIAS = 30;
@@ -42,6 +42,7 @@ const EMOJI_CATEGORIA = {
   subbot: '🤖',
   download: '⬇️',
   casino: '🎲',
+  arcade: '🕹️',
   gacha: '🎁',
   'gacha-anime': '🎴',
   fun: '🎉',
@@ -65,6 +66,7 @@ const NOMBRE_CATEGORIA = {
   subbot: 'CLAN DE SOMBRAS (Subbots)',
   download: 'ARSENAL DE GARRAS (Descargas)',
   casino: 'CALLEJON DEL BAMBU NEGRO (Casino)',
+  arcade: 'SALA ARCADE DE LA MANADA (Juegos web)',
   gacha: 'RULETA DEL DESTINO (Gacha)',
   'gacha-anime': 'GACHA ANIME',
   fun: 'MANADA SALVAJE (Diversion)',
@@ -97,7 +99,7 @@ function recortar(texto = '', max = 90) {
 
 // ---------- Estilo Halloween (.halloween on/off) ----------
 const EMOJI_CATEGORIA_HW = {
-  general: '🏚️', subbot: '🦇', download: '⚰️', casino: '🎰', gacha: '🧪', 'gacha-anime': '🎴',
+  general: '🏚️', subbot: '🦇', download: '⚰️', casino: '🎰', arcade: '👾', gacha: '🧪', 'gacha-anime': '🎴',
   fun: '👻', owner: '👑', economia: '🎃', perfil: '💀', anime: '🎌', admin: '🧙', ia: '🔮',
   tools: '🕯️', logo: '🎨', logovideo: '🎬', config: '📜', interaction: '🧛', niveles: '🏆', nsfw: '🔞'
 };
@@ -107,6 +109,7 @@ const NOMBRE_CATEGORIA_HW = {
   subbot: 'CLAN DE SOMBRAS (Subbots)',
   download: 'ARSENAL DE GARRAS MALDITAS (Descargas)',
   casino: 'CALLEJON DEL BAMBU MALDITO (Casino)',
+  arcade: 'ARCADE DE LOS PANDAS FANTASMA (Juegos web)',
   gacha: 'RULETA DEL DESTINO OSCURO (Gacha)',
   'gacha-anime': 'GACHA ANIME DE TERROR',
   fun: 'MANADA DE LA NOCHE (Diversion)',
