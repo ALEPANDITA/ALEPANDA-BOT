@@ -275,8 +275,11 @@ canvas#c {
 
   var CARD_ID = '__CARD_ID__';
   var CARD_SECRET = '__CARD_SECRET__';
-  var COIN_VAL = 250;   // lo que vale cada moneda de oro (el bot lo manda en el link: &v=)
-  var PREFIX = '.';     // prefijo del bot para armar el comando de cobro (el bot lo manda en el link: &p=)
+  // Valor de la moneda y prefijo del bot: si la pagina viaja como ARCHIVO el bot los escribe aqui; si viaja como LINK llegan en &v= y &p=
+  var COIN_VAL = parseInt('__COIN_VAL__', 10);
+  if (!(COIN_VAL >= 1 && COIN_VAL <= 100000)) COIN_VAL = 250;
+  var PREFIX = '__PREFIX__';
+  if (PREFIX.indexOf('__') === 0 || PREFIX.length > 3) PREFIX = '.';
   try {
     var sp = new URLSearchParams(window.location.search);
     var qCard = sp.get('card') || sp.get('code');

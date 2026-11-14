@@ -3,7 +3,8 @@
 //   .flappy               -> tu link personal de Flappy Fox        (.flappy nuevo = link nuevo)
 //   .reclamar FOX-...     -> cobras el codigo que te dio la pagina al perder
 //   .arcade top           -> ranking por mejor puntaje
-//   Solo owner: .arcade url <http://IP:8787 | https://dominio | auto> · .arcade puerto <n> · .arcade config [clave valor] · .arcade estado
+//   Solo owner: .arcade modo <archivo|link> · .arcade estado · .arcade config [clave valor]
+//               (solo modo link) .arcade url <http://IP:8787 | https://dominio | auto> · .arcade puerto <n>
 // Para sumar otro juego: su .html en assets/arcade/ + una entrada en CATALOGO de lib/arcade.js (los comandos salen solos).
 // Diseño de los mensajes: lib/arcade-ui.js
 const { leerConfig } = require('../../lib/config');
@@ -27,57 +28,95 @@ async function idsConResolucion(sock, msg) {
 const argumentos = (texto, prefix) => String(texto || '').trim().slice(prefix.length).trim().split(/\s+/).slice(1).filter(Boolean);
 
 // ───────────── Comando de cada juego del catalogo (.flappy, ...) ─────────────
+// Modo "archivo" (por defecto): el bot manda el juego como archivo .html personalizado y se juega directo desde el chat.
+// Modo "link": el bot manda un link a su mini servidor web (.arcade modo link).
+function lineasComoSeJuega(juego, prefix, paso1) {
+  return [
+    '🎮 *¿Cómo se juega?*',
+    paso1,
+    `② Al perder te da un boleto *${juego.tag}-...*`,
+    `③ Tócale *Copiar código* y pégalo aquí: *${prefix}reclamar ${juego.tag}-...*`
+  ];
+}
+
+async function enviarComoArchivo({ sock, jid, msg, juego, prefix, ids, nueva, cfg }) {
+  const { tarjeta, nueva: esNueva } = arcade.obtenerTarjeta(juego, ids, { nueva });
+  const html = arcade.htmlPersonalizado(juego, tarjeta, prefix);
+  const horas = Math.max(1, Math.round((tarjeta.expira - Date.now()) / 3600000));
+  const caption = marco([
+    `_${juego.descripcion}_`,
+    '',
+    esNueva ? '📎 *Tu juego personal va arriba* ⬆️' : '📎 *Tu juego sigue vigente, va arriba* ⬆️',
+    '_Tócalo para abrirlo: si te pregunta con qué, elige *Chrome* 🌐_',
+    '',
+    ...lineasComoSeJuega(juego, prefix, '① Toca el archivo y juega'),
+    '',
+    REGLA,
+    ...lineasPremios(cfg),
+    `⏳ Dura ~${horas} h · 🤫 es solo tuyo, no lo reenvíes`
+  ], { titulo: juego.titulo.toUpperCase(), emoji: juego.emoji });
+  await sock.sendMessage(jid, {
+    document: Buffer.from(html, 'utf8'),
+    mimetype: 'text/html',
+    fileName: `${juego.titulo.replace(/\s+/g, '')}-${tarjeta.id}.html`,
+    caption
+  }, { quoted: msg });
+}
+
+async function enviarComoLink({ sock, jid, msg, juego, prefix, ids, nueva, cfg }) {
+  const responder = (t) => sock.sendMessage(jid, { text: t }, { quoted: msg });
+  const srv = web.estadoServidor();
+  if (!srv.escuchando) {
+    return responder(marco([
+      '😴 La sala arcade está *apagada* en este momento.',
+      srv.error ? `_(${srv.error})_` : '',
+      'Avísale al owner: *' + prefix + 'arcade estado*'
+    ].filter((x) => x !== ''), { titulo: 'ARCADE APAGADO', emoji: '🔌' }));
+  }
+  const base = await web.urlBase();
+  if (!base) {
+    return responder(marco([
+      '🧭 Todavía no sé la dirección pública del arcade.',
+      '',
+      'El owner debe ponerla con:',
+      `*${prefix}arcade url http://IP-DEL-VPS:${srv.puerto}*`
+    ], { titulo: 'FALTA LA DIRECCIÓN', emoji: '🧭' }));
+  }
+
+  const { tarjeta, nueva: esNueva } = arcade.obtenerTarjeta(juego, ids, { nueva });
+  const enlace = base.base + arcade.enlaceRelativo(juego, tarjeta, prefix);
+  const horas = Math.max(1, Math.round((tarjeta.expira - Date.now()) / 3600000));
+
+  await responder(marco([
+    `_${juego.descripcion}_`,
+    '',
+    esNueva ? '🔗 *Tu link personal está abajo* ⬇️' : '🔗 *Tu link sigue vigente, está abajo* ⬇️',
+    '',
+    ...lineasComoSeJuega(juego, prefix, '① Ábrelo y juega'),
+    '',
+    REGLA,
+    ...lineasPremios(cfg),
+    `⏳ Dura ~${horas} h · 🤫 es solo tuyo, no lo compartas`
+  ], { titulo: juego.titulo.toUpperCase(), emoji: juego.emoji }));
+  await sock.sendMessage(jid, { text: enlace });
+}
+
 function comandoJuego(juego) {
   return {
     name: juego.comandos[0],
     aliases: juego.comandos.slice(1),
     category: 'arcade',
-    description: `${juego.emoji} ${juego.titulo}: tu link personal para jugar y ganar monedas (se cobra con .reclamar)`,
+    description: `${juego.emoji} ${juego.titulo}: te mando el juego para jugar directo desde WhatsApp y ganar monedas (se cobra con .reclamar)`,
     execute: async (sock, jid, msg, { prefix, texto }) => {
       const arg = argumentos(texto, prefix).join(' ').toLowerCase();
       const nueva = /^(nuevo|nueva|renovar|reset|otro|otra)/.test(arg);
       const cfg = arcade.leerConfigArcade();
-      const responder = (t) => sock.sendMessage(jid, { text: t }, { quoted: msg });
-
-      const srv = web.estadoServidor();
-      if (!srv.escuchando) {
-        return responder(marco([
-          '😴 La sala arcade está *apagada* en este momento.',
-          srv.error ? `_(${srv.error})_` : '',
-          'Avísale al owner: *' + prefix + 'arcade estado*'
-        ].filter((x) => x !== ''), { titulo: 'ARCADE APAGADO', emoji: '🔌' }));
-      }
-      const base = await web.urlBase();
-      if (!base) {
-        return responder(marco([
-          '🧭 Todavía no sé la dirección pública del arcade.',
-          '',
-          'El owner debe ponerla con:',
-          `*${prefix}arcade url http://IP-DEL-VPS:${srv.puerto}*`
-        ], { titulo: 'FALTA LA DIRECCIÓN', emoji: '🧭' }));
-      }
 
       const ids = await idsConResolucion(sock, msg);
       if (!ids.length) return sock.sendMessage(jid, { text: 'No pude identificarte, intenta de nuevo.' });
-      const { tarjeta, nueva: esNueva } = arcade.obtenerTarjeta(juego, ids, { nueva });
-      const enlace = base.base + arcade.enlaceRelativo(juego, tarjeta, prefix);
-      const horas = Math.max(1, Math.round((tarjeta.expira - Date.now()) / 3600000));
 
-      await responder(marco([
-        `_${juego.descripcion}_`,
-        '',
-        esNueva ? '🔗 *Tu link personal está abajo* ⬇️' : '🔗 *Tu link sigue vigente, está abajo* ⬇️',
-        '',
-        '🎮 *¿Cómo se juega?*',
-        '① Ábrelo y juega',
-        `② Al perder te da un boleto *${juego.tag}-...*`,
-        `③ Mándalo con *${prefix}reclamar ${juego.tag}-...*`,
-        '',
-        REGLA,
-        ...lineasPremios(cfg),
-        `⏳ Dura ~${horas} h · 🤫 es solo tuyo, no lo compartas`
-      ], { titulo: juego.titulo.toUpperCase(), emoji: juego.emoji }));
-      await sock.sendMessage(jid, { text: enlace });
+      const datos = { sock, jid, msg, juego, prefix, ids, nueva, cfg };
+      return cfg.modo === 'link' ? enviarComoLink(datos) : enviarComoArchivo(datos);
     }
   };
 }
@@ -147,7 +186,7 @@ const reclamar = {
 
 // ───────────── .arcade ─────────────
 const CLAVES = {
-  url: 'url', puerto: 'puerto', nombre: 'nombreBot', moneda: 'valorMoneda', valor: 'valorMoneda',
+  modo: 'modo', url: 'url', puerto: 'puerto', nombre: 'nombreBot', moneda: 'valorMoneda', valor: 'valorMoneda',
   maxcobro: 'maxPorCobro', maxdia: 'maxDiario', maxdiario: 'maxDiario', vigencia: 'vigenciaHoras'
 };
 
@@ -166,7 +205,7 @@ const arcadeCmd = {
     const cfg = arcade.leerConfigArcade();
 
     // Subcomandos solo para el owner
-    if (['url', 'puerto', 'config', 'configurar', 'estado'].includes(sub)) {
+    if (['modo', 'url', 'puerto', 'config', 'configurar', 'estado'].includes(sub)) {
       const config = leerConfig();
       if (!(await esOwnerBot(sock, config, msg))) {
         return sock.sendMessage(jid, { text: marco(['⚠️ Eso solo lo puede usar un owner del bot.'], { titulo: 'SIN PERMISOS', emoji: '👑' }) }, { quoted: msg });
@@ -199,7 +238,7 @@ const arcadeCmd = {
     lineas.push(
       '',
       '🐾 *¿CÓMO SE JUEGA?*',
-      '① Escribe el comando del juego y te doy tu link',
+      '① Escribe el comando del juego y te lo mando',
       '② Juega; al perder te da un boleto',
       `③ Mándalo con *${prefix}reclamar BOLETO*`,
       `④ Las monedas caen en tu *${prefix}saldo* 💰`,
@@ -220,21 +259,53 @@ async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
   if (sub === 'estado') {
     const srv = web.estadoServidor();
     const r = arcade.resumenEstado();
-    const base = await web.urlBase();
+    const enLink = cfg.modo === 'link';
+    const base = enLink ? await web.urlBase() : null;
     const lineas = [
-      `🌐 Servidor web: ${srv.escuchando ? '*encendido* ✅' : `*apagado* ❌${srv.error ? ` (${srv.error})` : ''}`}`,
-      `🔌 Puerto: *${srv.puerto}*`,
-      `🔗 Dirección: ${base ? `*${base.base}*${base.auto ? ' _(detectada sola)_' : ''}` : `*no detectada* — usa ${prefix}arcade url ...`}`,
+      `🎛️ Modo: *${enLink ? 'link (página web del bot)' : 'archivo (se juega directo en WhatsApp)'}*`,
+      ...(enLink ? [
+        `🌐 Servidor web: ${srv.escuchando ? '*encendido* ✅' : `*apagado* ❌${srv.error ? ` (${srv.error})` : ''}`}`,
+        `🔌 Puerto: *${srv.puerto}*`,
+        `🔗 Dirección: ${base ? `*${base.base}*${base.auto ? ' _(detectada sola)_' : ''}` : `*no detectada* — usa ${prefix}arcade url ...`}`
+      ] : []),
       `🎟️ Boletos vivos: *${r.tarjetasVivas}* · 🎮 Jugadores: *${r.jugadores}*`,
       '',
       REGLA,
       `🪙 Moneda: *$${fmt(cfg.valorMoneda)}* · Tope cobro: *$${fmt(cfg.maxPorCobro)}* · Tope día: *$${fmt(cfg.maxDiario)}*`,
-      `⏳ Vigencia del link: *${cfg.vigenciaHoras} h* · Nombre en la página: *${cfg.nombreBot}*`
+      `⏳ Vigencia del boleto: *${cfg.vigenciaHoras} h* · Nombre en la página: *${cfg.nombreBot}*`
     ];
-    if (base && base.auto) {
+    if (enLink && base && base.auto) {
       lineas.push('', '🧱 Si desde fuera no abre, abre el puerto en el VPS:', `*sudo ufw allow ${srv.puerto}/tcp*`);
     }
     return responder(caja(lineas, 'ARCADE · ESTADO'));
+  }
+
+  if (sub === 'modo') {
+    if (!args.length) {
+      return responder(caja([
+        `Modo actual: *${cfg.modo}*`,
+        '',
+        `📎 *${prefix}arcade modo archivo* ➜ el bot manda el juego como archivo y se juega directo en WhatsApp (sin servidor, sin puertos)`,
+        `🔗 *${prefix}arcade modo link* ➜ el bot manda un link a su página web (necesita puerto abierto)`
+      ], 'ARCADE · MODO'));
+    }
+    const r = arcade.cambiarConfig('modo', args[0]);
+    if (!r.ok) return responder(caja([`⚠️ ${r.motivo}`], 'MODO NO VÁLIDO'));
+    if (r.valor === 'link') {
+      web.iniciar();
+      await new Promise((res) => setTimeout(res, 400));
+      const srv = web.estadoServidor();
+      return responder(caja([
+        '✅ Modo *link* activado.',
+        `🌐 Servidor web: ${srv.escuchando ? '*encendido*' : `*con problema* (${srv.error || 'sin detalle'})`} · puerto *${srv.puerto}*`,
+        '',
+        'Abre el puerto en el VPS:',
+        `*sudo ufw allow ${srv.puerto}/tcp*`,
+        `Revisa la dirección con *${prefix}arcade estado*`
+      ], 'ARCADE · MODO'));
+    }
+    await web.detener();
+    return responder(caja(['✅ Modo *archivo* activado: ahora el juego se manda como archivo y se juega directo desde WhatsApp.', '🔌 Apagué el servidor web (ya no hace falta).'], 'ARCADE · MODO'));
   }
 
   if (sub === 'url') {
@@ -268,6 +339,7 @@ async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
   // config
   if (!args.length) {
     return responder(caja([
+      `🎛️ modo: *${cfg.modo}*`,
       `🔗 url: *${cfg.url || 'auto'}*`,
       `🔌 puerto: *${cfg.puerto}*`,
       `🏷️ nombre (en la página): *${cfg.nombreBot}*`,

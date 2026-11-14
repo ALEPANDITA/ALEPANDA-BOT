@@ -845,7 +845,7 @@ async function startBot() {
   });
 }
 
-// Arcade: mini servidor web de los juegos (idempotente; si el puerto esta ocupado solo avisa en consola)
-try { require('./lib/arcade-web').iniciar(); } catch (err) { console.error('[arcade] no pude iniciar el servidor web:', err.message); }
+// Arcade: por defecto el juego se manda como archivo (sin servidor). Solo si el owner pone .arcade modo link se enciende el mini servidor web.
+try { require('./lib/arcade-web').iniciarSiHaceFalta(); } catch (err) { console.error('[arcade] no pude iniciar el servidor web:', err.message); }
 
 startBot();
