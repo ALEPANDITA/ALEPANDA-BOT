@@ -52,3 +52,6 @@ grupos-apagados.json*
 pandita-data.json
 mei-data.json
 *.corrupto-*
+
+# Respaldos que hace .repararcmd al limpiar duplicados (se quedan en el VPS, no se suben)
+commands/_eliminados/mantenimiento/
