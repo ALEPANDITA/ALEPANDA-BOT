@@ -655,10 +655,12 @@ async function startBot() {
 
       // El mute es por grupo (grupo.muteados), no global
       if (grupo.muteados && grupo.muteados[remitente]) {
-        // Un muteado todavia puede escribir .unmuteall (solo lo ejecuta si es admin u owner)
+        // Al super owner del bot nunca se le silencia (la revision solo corre cuando hay un muteado escribiendo)
         let dejarPasar = false;
+        try { dejarPasar = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { dejarPasar = false; }
+        // Un muteado todavia puede escribir .unmuteall (solo lo ejecuta si es admin u owner)
         const prefijoMute = grupo.prefix || config.prefix || '.';
-        if (texto.startsWith(prefijoMute)) {
+        if (!dejarPasar && texto.startsWith(prefijoMute)) {
           const cmdMute = comandos.get(normalizarComando(texto.slice(prefijoMute.length).trim().split(/\s+/)[0]));
           dejarPasar = !!(cmdMute && cmdMute.permiteMuteado);
         }
@@ -713,7 +715,8 @@ async function startBot() {
       const tieneLink = /(https?:\/\/|www\.)\S+/i.test(texto);
       if (grupo.antilink && tieneLink) {
         const metadata = await sock.groupMetadata(jid);
-        const esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+        let esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+        if (!esAdmin) { try { esAdmin = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { /* sigue como no-admin */ } } // el super owner no se borra
         if (!esAdmin) {
           await sock.sendMessage(jid, { delete: msg.key });
           await sock.sendMessage(jid, { text: 'Enlace eliminado. El antilink esta activado.' });

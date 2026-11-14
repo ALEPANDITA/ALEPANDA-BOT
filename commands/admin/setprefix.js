@@ -1,4 +1,5 @@
 const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 module.exports = {
   name: 'setprefix',
@@ -6,9 +7,8 @@ module.exports = {
   description: 'Cambia el prefijo de este grupo (ej: .setprefix !)',
   groupOnly: true,
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const metadata = await sock.groupMetadata(jid);
     const remitente = msg.key.participant;
-    const esAdmin = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
+    const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente, msg); // incluye al super owner del bot
 
     if (!esAdmin) {
       return sock.sendMessage(jid, { text: 'Solo un admin del grupo puede cambiar el prefijo.' });

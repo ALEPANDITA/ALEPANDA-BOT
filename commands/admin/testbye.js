@@ -1,11 +1,11 @@
 const { leerConfig } = require('../../lib/config');
 const { leerDB, getGrupo } = require('../../lib/db');
 const { construirTexto, mencionesExtra, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura } = require('../../lib/bienvenidapro');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 async function esAdmin(sock, jid, msg) {
-  const metadata = await sock.groupMetadata(jid);
-  const remitente = msg.key.participant || msg.key.remoteJid;
-  return !!metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, msg.key.participant || msg.key.remoteJid, msg);
+  return esAdmin; // incluye al super owner del bot
 }
 
 module.exports = {
