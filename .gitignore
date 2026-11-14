@@ -55,3 +55,6 @@ mei-data.json
 
 # Respaldos que hace .repararcmd al limpiar duplicados (se quedan en el VPS, no se suben)
 commands/_eliminados/mantenimiento/
+
+# Arcade: tarjetas, codigos cobrados y rankings (datos, no subir)
+arcade-estado.json*

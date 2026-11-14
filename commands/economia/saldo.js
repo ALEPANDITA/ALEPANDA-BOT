@@ -3,6 +3,7 @@ const { caja } = require('../../lib/estilo');
 
 module.exports = {
   name: 'saldo',
+  aliases: ['bal', 'balance'],
   category: 'economia',
   description: 'Ver tu saldo actual',
   execute: async (sock, jid, msg) => {
