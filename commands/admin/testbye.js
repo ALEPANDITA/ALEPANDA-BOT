@@ -1,11 +1,11 @@
 const { leerConfig } = require('../../lib/config');
 const { leerDB, getGrupo } = require('../../lib/db');
-const { construirTexto, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura } = require('../../lib/bienvenidapro');
+const { construirTexto, mencionesExtra, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura } = require('../../lib/bienvenidapro');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 async function esAdmin(sock, jid, msg) {
-  const metadata = await sock.groupMetadata(jid);
-  const remitente = msg.key.participant || msg.key.remoteJid;
-  return !!metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, msg.key.participant || msg.key.remoteJid, msg);
+  return esAdmin; // incluye al super owner del bot
 }
 
 module.exports = {
@@ -49,7 +49,8 @@ module.exports = {
     const tGenerar = Date.now();
 
     const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
-    await sock.sendMessage(jid, { ...payload, mentions: [remitente] });
+    await sock.sendMessage(jid, { ...payload, mentions: [remitente, ...mencionesExtra(plantilla, metadata, sock)] });
+    await require('../../lib/audiosbienvenida').enviarAudios(sock, jid, 'bye', { forzar: true });
     const tEnvio = Date.now();
 
     console.log(

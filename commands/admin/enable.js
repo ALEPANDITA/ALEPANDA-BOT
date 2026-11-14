@@ -10,11 +10,20 @@ module.exports = {
     const db = leerDB();
     const grupo = getGrupo(db, jid);
     const remitente = msg.key.participant;
-    const args = texto.slice(prefix.length).trim().split(/ \s+/);
+    const args = texto.slice(prefix.length).trim().split(/\s+/);
     const opcion = args[1]?.toLowerCase();
 
+    // El NSFW solo lo prende o apaga un owner (a los demas ni se les responde); lo demas sigue siendo de admins
+    if (opcion === 'nsfw') {
+      const { esOwnerBot } = require('../../lib/permisos');
+      const { leerConfig } = require('../../lib/config');
+      if (!(await esOwnerBot(sock, leerConfig(), msg))) return;
+      const nsfw = require('../../lib/nsfw');
+      if (await nsfw.esMenorRegistrado(sock, jid, msg)) return await sock.sendMessage(jid, { text: nsfw.TEXTO_MENOR }, { quoted: msg });
+    }
+
     const esAdmin = await esAdminDelGrupo(sock, jid, remitente);
-    if (!esAdmin) return await sock.sendMessage(jid, { text: '❌ Solo los *admins* pueden usar este comando.' });
+    if (!esAdmin && !(opcion === 'nsfw')) return await sock.sendMessage(jid, { text: '❌ Solo los *admins* pueden usar este comando.' });
 
     if (opcion === 'nsfw') {
       grupo.nsfw = !grupo.nsfw;

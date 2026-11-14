@@ -10,7 +10,7 @@ const pino = require('pino');
 const { leerConfig } = require('./lib/config');
 const { esOwnerBot } = require('./lib/permisos');
 const { leerDB, getGrupo, getUsuario } = require('./lib/db');
-const { construirTexto, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura, conTimeout } = require('./lib/bienvenidapro');
+const { construirTexto, mencionesExtra, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura, conTimeout } = require('./lib/bienvenidapro');
 
 const fs = require('fs');
 const path = require('path');
@@ -78,18 +78,29 @@ function cargarComandos() {
   const basePath = path.join(__dirname, 'commands');
   const categorias = fs.readdirSync(basePath);
   for (const categoria of categorias) {
+    // Carpetas que empiezan con _ (_eliminados, _staging) no son comandos activos
+    if (categoria.startsWith('_')) continue;
     const catPath = path.join(basePath, categoria);
     if (!fs.statSync(catPath).isDirectory()) continue;
     const archivos = listarJsRecursivo(catPath);
     for (const rutaArchivo of archivos) {
-      const exportado = require(rutaArchivo);
-      const lista = Array.isArray(exportado) ? exportado : [exportado];
-      for (const comando of lista) {
-        if (!comando._rutaArchivo) comando._rutaArchivo = rutaArchivo;
-        comandos.set(comando.name, comando);
-        if (Array.isArray(comando.aliases)) {
-          for (const alias of comando.aliases) comandos.set(alias, comando);
+      try {
+        const exportado = require(rutaArchivo);
+        const lista = Array.isArray(exportado) ? exportado : [exportado];
+        for (const comando of lista) {
+          if (!comando._rutaArchivo) comando._rutaArchivo = rutaArchivo;
+          comandos.set(comando.name, comando);
+          if (Array.isArray(comando.aliases)) {
+            for (const alias of comando.aliases) comandos.set(alias, comando);
+          }
+          // Alias que funcionan pero no se listan en el menu (ej. .menu1, .menu2, ...)
+          if (Array.isArray(comando.aliasesOcultas)) {
+            for (const alias of comando.aliasesOcultas) comandos.set(alias, comando);
+          }
         }
+      } catch (err) {
+        // Un comando roto no debe tumbar todo el bot
+        console.error(`[comandos] No se pudo cargar ${path.relative(__dirname, rutaArchivo)}:`, err.message);
       }
     }
   }
@@ -111,6 +122,12 @@ function logMensaje({ remitente, texto, esGrupo }) {
 console.log('📦 Cargando comandos...');
 const comandos = cargarComandos();
 console.log(`✅ ${comandos.size} comandos/alias cargados sin errores.`);
+
+// NSFW: la primera vez que arranca con este cambio se apaga en todos los grupos (solo vuelve donde un owner use .tnsfw on)
+try {
+  const gruposApagados = require('./lib/nsfw').apagarNsfwUnaVez();
+  if (gruposApagados) console.log(`🔞 NSFW apagado en ${gruposApagados} grupo(s) que lo tenían activo. Un owner lo vuelve a activar con .tnsfw on`);
+} catch (err) { console.error('[nsfw] No pude apagar el NSFW de los grupos:', err && err.message ? err.message : err); }
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const pregunta = (texto) => new Promise((resolve) => rl.question(texto, resolve));
@@ -205,6 +222,12 @@ async function startBot() {
         }
       }, 30 * 1000);
 
+      // .time: avisa por privado cuando se acaba el tiempo del bot en un grupo
+      try { require('./lib/tiempo-grupos').iniciarVigilanteTiempos(sock); } catch (err) { console.error('[time] No pude iniciar el vigilante:', err.message); }
+
+      // .cerrar <tiempo>: abre solo los grupos cuyo cierre ya vencio
+      try { require('./lib/cierre-grupos').iniciarVigilanteCierres(sock); } catch (err) { console.error('[cerrar] No pude iniciar el vigilante:', err.message); }
+
       const { iniciarMonitorMemoria } = require('./lib/memoria');
       iniciarMonitorMemoria([podarCacheMetadataGrupos]);
     }
@@ -242,14 +265,23 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('groups.update', (actualizaciones) => {
+  sock.ev.on('groups.update', async (actualizaciones) => {
     for (const act of actualizaciones) {
       if (act.id) cacheMetadataGrupos.delete(act.id);
+    }
+    // Alertas de grupo (.alertas on): quien cambio nombre/ajustes/icono/link
+    for (const act of actualizaciones) {
+      try {
+        if (act.id && require('./lib/apagados').estaApagado(act.id)) continue;
+        await require('./lib/alertas').alertaCambioGrupo(sock, act);
+      } catch (e) { console.error('[alertas]', e); }
     }
   });
 
   sock.ev.on('group-participants.update', async (update) => {
     const { id: jid, participants, action } = update;
+    // Grupo apagado con .apagar: ni bienvenidas ni nada
+    try { if (require('./lib/apagados').estaApagado(jid)) return; } catch (e) { console.error('[apagados]', e); }
     const config = leerConfig();
     const db = leerDB();
     const grupo = getGrupo(db, jid);
@@ -318,6 +350,22 @@ async function startBot() {
       // numero falso/confuso.
       const numeroParaImagen = String(numero).startsWith('lid-') ? null : numero;
 
+      if (action === 'demote') {
+        try { await require('./lib/alertas').alertaDegradado(sock, jid, jidReal, update.author); } catch (err) { console.error('[alertas]', err); }
+        return;
+      }
+
+      if (action === 'promote') {
+        try {
+          // El texto de la etiqueta tiene que coincidir con el JID de la mencion para que se vea como @usuario
+          await sock.sendMessage(jid, {
+            text: `🎉 @${jidReal.split('@')[0]} felicidades, subiste a admin 👑`,
+            mentions: [jidReal]
+          });
+        } catch (err) { console.error('[promote]', err); }
+        return;
+      }
+
       if (action === 'add' && grupo.antifake && !numero.startsWith('lid-')) {
         const codigos = grupo.paisesPermitidos || ['52', '51'];
         const permitido = codigos.some(c => numero.startsWith(c));
@@ -357,7 +405,8 @@ async function startBot() {
           fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
-        await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
+        await sock.sendMessage(jid, { ...payload, mentions: [jidReal, ...mencionesExtra(plantilla, metadata, sock)] });
+        await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'welcome');
       }
 
       if (action === 'remove' && grupo.despedida) {
@@ -369,7 +418,8 @@ async function startBot() {
           fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
         });
         const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
-        await sock.sendMessage(jid, { ...payload, mentions: [jidReal] });
+        await sock.sendMessage(jid, { ...payload, mentions: [jidReal, ...mencionesExtra(plantilla, metadata, sock)] });
+        await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'bye');
       }
     }
 
@@ -380,6 +430,9 @@ async function startBot() {
     const msg = messages[0];
     if (!msg.message || msg.key.fromMe) return;
 
+    // .ver: recuerda (solo la referencia, no el archivo) los mensajes de "ver una vez" que llegan
+    try { const vu = require('./lib/vistaunica'); for (const m of messages) if (!m.key.fromMe) vu.recordar(m); } catch (e) { /* no estorba al resto del bot */ }
+
     const config = leerConfig();
     const jid = msg.key.remoteJid;
     const texto = (
@@ -387,11 +440,32 @@ async function startBot() {
       msg.message.extendedTextMessage?.text ||
       msg.message.imageMessage?.caption ||
       msg.message.videoMessage?.caption ||
+      msg.message.groupInviteMessage?.caption ||
       ''
     ).trim();
     const esGrupo = jid.endsWith('@g.us');
 
-    if (esGrupo && config.grupoPelis && jid === config.grupoPelis && msg.message.videoMessage) {
+    // Grupo apagado con .apagar: el bot no responde a nadie ahi. Unica excepcion: un owner con .encender
+    try {
+      if (esGrupo && require('./lib/apagados').estaApagado(jid)) {
+        const dbApagado = leerDB();
+        const prefixApagado = getGrupo(dbApagado, jid).prefix || config.prefix || '.';
+        if (texto.startsWith(prefixApagado)) {
+          const cmdApagado = comandos.get(normalizarComando(texto.slice(prefixApagado.length).trim().split(/\s+/)[0]));
+          if (cmdApagado && cmdApagado.permiteApagado && await esOwnerBot(sock, config, msg)) {
+            await cmdApagado.execute(sock, jid, msg, { prefix: prefixApagado, texto, comandos });
+          }
+        }
+        return;
+      }
+    } catch (e) { console.error('[apagados]', e); return; }
+
+    // Usuarios bloqueados con .bloquear: no pueden usar nada del bot (comandos, botones, juegos, IAs...).
+    // La moderacion del grupo (mute, antiflood, antilink) si se les sigue aplicando.
+    let bloqueado = false;
+    try { bloqueado = !!require('./lib/bloqueos').estaBloqueado(msg); } catch (e) { console.error('[bloqueos]', e); }
+
+    if (!bloqueado && esGrupo && config.grupoPelis && jid === config.grupoPelis && msg.message.videoMessage) {
       try {
         const vm = msg.message.videoMessage;
         if (!vm.mimetype || vm.mimetype.startsWith('video/')) {
@@ -444,10 +518,34 @@ async function startBot() {
     const { propuestasPorMensaje, limpiarExpiradas } = require('./lib/matrimonio');
     limpiarExpiradas();
     const stanzaIdRespuesta = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
-    if (stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
+    if (!bloqueado && stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
       const propuesta = propuestasPorMensaje.get(stanzaIdRespuesta);
       const remitenteRespuesta = msg.key.participant || msg.key.remoteJid;
-      if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) {
+      const mismaPersonaCasar = async () => {
+        if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) return true;
+        try {
+          const { resolverJidReal } = require('./lib/identidad');
+          const metaCasar = await obtenerMetadataCacheada(sock, jid).catch(() => null);
+          const [x, y] = await Promise.all([
+            resolverJidReal(sock, remitenteRespuesta, metaCasar),
+            resolverJidReal(sock, propuesta.para, metaCasar)
+          ]);
+          const num = (v) => String(v || '').split('@')[0].split(':')[0];
+          const ids = (q) => [q.id, q.lid, q.jid, q.phoneNumber].filter(Boolean).map(num);
+          let igual = num(x) === num(y);
+          if (!igual) {
+            let ficha = (metaCasar && metaCasar.participants || []).find(q => ids(q).includes(num(propuesta.para)));
+            if (!ficha) {
+              const metaFresca = await obtenerMetadataCacheada(sock, jid, true).catch(() => null);
+              ficha = (metaFresca && metaFresca.participants || []).find(q => ids(q).includes(num(propuesta.para)));
+            }
+            if (ficha) igual = ids(ficha).includes(num(remitenteRespuesta));
+          }
+          if (igual) propuesta.para = remitenteRespuesta;
+          return igual;
+        } catch (e) { return false; }
+      };
+      if (await mismaPersonaCasar()) {
         const respuestaTexto = texto.trim().toLowerCase();
         if (respuestaTexto === 'si' || respuestaTexto === 'sí') {
           propuestasPorMensaje.delete(stanzaIdRespuesta);
@@ -460,6 +558,7 @@ async function startBot() {
           } else {
             perfilDe.pareja = propuesta.para;
             perfilPara.pareja = propuesta.de;
+            require('./lib/matrimonio').registrarBoda(perfilDe, propuesta.de, perfilPara, propuesta.para);
             guardarDB(dbCasar);
             await sock.sendMessage(propuesta.jid, {
               text: `💒 @${propuesta.de.split('@')[0]} y @${propuesta.para.split('@')[0]} ahora estan casados! Felicidades 🎉`,
@@ -480,10 +579,11 @@ async function startBot() {
     }
 
     const botonId = msg.message?.templateButtonReplyMessage?.selectedId;
-    if (botonId && botonId.includes('|')) {
+    if (!bloqueado && botonId && botonId.includes('|')) {
       const [comandoBoton, urlBoton] = botonId.split('|');
       const comandoEncontrado = comandos.get(normalizarComando(comandoBoton));
       if (comandoEncontrado) {
+        if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comandoEncontrado, { prefix }))) return;
         const textoFalso = `${prefix}${comandoBoton} ${urlBoton}`;
         try {
           await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
@@ -511,11 +611,12 @@ async function startBot() {
       if (selectedIdDirecto && !selectedIdDirecto.includes('|')) idSeleccionado = selectedIdDirecto;
     }
 
-    if (idSeleccionado && idSeleccionado.startsWith(prefix)) {
+    if (!bloqueado && idSeleccionado && idSeleccionado.startsWith(prefix)) {
       const argsSel = idSeleccionado.slice(prefix.length).trim().split(/\s+/);
       const nombreComandoSel = argsSel[0];
       const comandoSel = comandos.get(normalizarComando(nombreComandoSel));
       if (comandoSel) {
+        if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comandoSel, { prefix }))) return;
         try {
           await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
           await comandoSel.execute(sock, jid, msg, { prefix, texto: idSeleccionado, comandos });
@@ -543,17 +644,30 @@ async function startBot() {
       const usuario = getUsuario(db, remitente);
       const grupo = getGrupo(db, jid);
 
+      // Si es alguien registrado (.registrar) que escribe con otro id (ej. su @lid), se aprende para reconocerlo siempre
+      try { require('./lib/registro').aprenderAlias(db, remitenteCrudo, remitente); } catch (_) { /* no es critico */ }
+
       if (!grupo.actividad) grupo.actividad = {};
       if (!grupo.mensajes) grupo.mensajes = {};
       grupo.actividad[remitente] = Date.now();
       grupo.mensajes[remitente] = (grupo.mensajes[remitente] || 0) + 1;
       guardarDB(db);
 
-      if (usuario.muteado) {
-        // LOG TEMPORAL DE DIAGNOSTICO -- borrar despues de encontrar el bug del unmute
-        console.log(`[DIAGNOSTICO MUTE] mensaje de remitenteCrudo=${remitenteCrudo} resuelto=${remitente} -> muteado=true, se borra`);
-        await sock.sendMessage(jid, { delete: msg.key });
-        return;
+      // El mute es por grupo (grupo.muteados), no global
+      if (grupo.muteados && grupo.muteados[remitente]) {
+        // Al super owner del bot nunca se le silencia (la revision solo corre cuando hay un muteado escribiendo)
+        let dejarPasar = false;
+        try { dejarPasar = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { dejarPasar = false; }
+        // Un muteado todavia puede escribir .unmuteall (solo lo ejecuta si es admin u owner)
+        const prefijoMute = grupo.prefix || config.prefix || '.';
+        if (!dejarPasar && texto.startsWith(prefijoMute)) {
+          const cmdMute = comandos.get(normalizarComando(texto.slice(prefijoMute.length).trim().split(/\s+/)[0]));
+          dejarPasar = !!(cmdMute && cmdMute.permiteMuteado);
+        }
+        if (!dejarPasar) {
+          await sock.sendMessage(jid, { delete: msg.key });
+          return;
+        }
       }
 
       if (grupo.antiflood || grupo.antispam) {
@@ -569,7 +683,8 @@ async function startBot() {
             const { esAdminDelGrupo } = require('./lib/permisos');
             const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
             if (!esAdmin) {
-              usuario.muteado = true;
+              if (!grupo.muteados) grupo.muteados = {};
+              grupo.muteados[remitente] = true;
               guardarDB(db);
               await sock.sendMessage(jid, {
                 text: `🚫 @${remitente.split('@')[0]} fue silenciado por flood (mensajes muy seguidos).`,
@@ -600,7 +715,8 @@ async function startBot() {
       const tieneLink = /(https?:\/\/|www\.)\S+/i.test(texto);
       if (grupo.antilink && tieneLink) {
         const metadata = await sock.groupMetadata(jid);
-        const esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+        let esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+        if (!esAdmin) { try { esAdmin = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { /* sigue como no-admin */ } } // el super owner no se borra
         if (!esAdmin) {
           await sock.sendMessage(jid, { delete: msg.key });
           await sock.sendMessage(jid, { text: 'Enlace eliminado. El antilink esta activado.' });
@@ -608,15 +724,27 @@ async function startBot() {
         }
       }
 
-      if (texto && grupo.simonAutomatico) {
+      if (texto && grupo.simonAutomatico && !bloqueado) {
         const { registrarMensaje, evaluarIntervencionSimon } = require('./lib/simonWatcher');
         const nombreParaSimon = msg.pushName || remitente.split('@')[0];
         registrarMensaje(jid, nombreParaSimon, texto);
-        evaluarIntervencionSimon(sock, jid).catch(err => {
+        evaluarIntervencionSimon(require('./lib/iaRespuestas').envolverSock(sock, 'simon'), jid).catch(err => {
           console.error('Fallo el watcher de Simon:', err);
         });
       }
     }
+
+    if (bloqueado) return;
+
+    // El owner responde (citando) a un plan de .crearcmd / .arreglarcmd: sigue la charla
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/crearcmd-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[crearcmd-plan]', e); }
+
+    // .repararcmd: el owner responde (citando) al plan de limpieza con "si" / "cancelar" / "conserva los de fun"
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/cmdmaint-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[cmdmaint-plan]', e); }
 
     const { obtenerJuego, terminarJuego } = require('./lib/juegos');
     const juegoActivo = obtenerJuego(jid);
@@ -630,11 +758,25 @@ async function startBot() {
       return;
     }
 
-    // PANDITA: IA independiente (solo actua si esta activada con .boton en este chat)
+    // 3 en raya (.gato): con una partida activa, mandar solo el numero (1-9) o responder con el ya es una jugada
     try {
-      const pandita = require('./lib/pandita');
-      if (await pandita.manejarMensaje({ sock, jid, msg, texto, esGrupo, prefix, comandos, obtenerMetadata: obtenerMetadataCacheada })) return;
-    } catch (e) { console.error('[pandita] hook:', e); }
+      if (texto && esGrupo && !texto.startsWith(prefix)) {
+        const tresRaya = comandos.get('3raya');
+        if (tresRaya && tresRaya.manejarNumeroSuelto && await tresRaya.manejarNumeroSuelto(sock, jid, msg, texto)) return;
+      }
+    } catch (err) { console.error('[3raya]', err); }
+
+    // Responder a un mensaje de Simi/Panda/Simon/Cupido sin escribir el comando
+    try {
+      if (texto && !texto.startsWith(prefix) && require('./lib/iaRespuestas').manejarRespuestaCitada({ sock, jid, msg, texto })) return;
+    } catch (err) {
+      console.error('[iaRespuestas]', err);
+    }
+
+    // PANDITA y MEI: IAs con voz, imagenes, audios y PDFs (solo actuan si estan activadas con .boton en este chat)
+    try {
+      if (await require('./lib/ia-personas').manejarMensaje({ sock, jid, msg, texto, esGrupo, prefix, comandos, obtenerMetadata: obtenerMetadataCacheada })) return;
+    } catch (e) { console.error('[ia-personas] hook:', e); }
 
     if (!texto.startsWith(prefix)) return;
 
@@ -643,6 +785,9 @@ async function startBot() {
     const comando = comandos.get(normalizarComando(nombreComando));
 
     if (!comando) return;
+
+    // .menuowner: si quien lo escribe no es owner, el bot ni reacciona ni responde (silencio total)
+    if (comando.silencioNoOwner && !(await esOwnerBot(sock, config, msg))) return;
 
     if (comando.groupOnly && !esGrupo) {
       return sock.sendMessage(jid, { text: 'Este comando solo funciona dentro de un grupo.' });
@@ -672,28 +817,27 @@ async function startBot() {
         })?.admin;
       }
 
-      if (grupoCheck.soloAdmins && !esAdminCheck && !esOwnerCheck) return;
-
+      // Modo admin + permisos por categoria: una categoria puesta en "todos" (.permisos <categoria> todos) queda abierta aunque haya modo admin
       const categoriaComando = comando.category || 'general';
-      const permisoCategoria = grupoCheck.permisosCategorias?.[categoriaComando];
-
-      if (permisoCategoria === 'admins' && !esAdminCheck && !esOwnerCheck) {
+      const acceso = require('./lib/acceso-categoria').decidirAcceso({
+        soloAdmins: !!grupoCheck.soloAdmins,
+        permisoCategoria: grupoCheck.permisosCategorias?.[categoriaComando],
+        esAdmin: !!esAdminCheck,
+        esOwner: !!esOwnerCheck
+      });
+      if (acceso === 'modo-admin') return;
+      if (acceso === 'categoria-admins') {
         return sock.sendMessage(jid, { text: `Los comandos de la categoria *${categoriaComando}* solo pueden ser usados por admins.` });
       }
     }
 
-    if (esGrupo && comando.category === 'nsfw') {
-      const dbNsfw = leerDB();
-      const grupoNsfw = getGrupo(dbNsfw, jid);
-      if (!grupoNsfw.nsfw) {
-        return sock.sendMessage(jid, { text: `Los comandos NSFW estan desactivados en este grupo.\nUsa *${prefix}nsfw on* para activarlos.` }, { quoted: msg });
-      }
-    }
+    // NSFW (categorias nsfw / nsfw2 y comandos marcados): apagado por defecto, solo mayores de 18 registrados, ver lib/nsfw.js
+    if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comando, { prefix }))) return;
 
     try {
       const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
       await sock.sendMessage(jid, { react: { text: emojiCategoria, key: msg.key } });
-      await comando.execute(sock, jid, msg, { prefix, texto, comandos });
+      await comando.execute(require('./lib/iaRespuestas').envolverSockSiEsIA(sock, comando), jid, msg, { prefix, texto, comandos });
     } catch (err) {
       console.error(err);
       await sock.sendMessage(jid, { text: 'Ocurrio un error al ejecutar el comando.' });

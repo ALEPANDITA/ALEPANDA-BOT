@@ -1,14 +1,11 @@
 const { leerConfig } = require('../../lib/config');
-const fs = require('fs');
-const path = require('path');
+const { borrarMenu } = require('../../lib/menumedia');
 const { esOwnerBot } = require('../../lib/permisos');
-
-const videoPath = path.join(__dirname, '..', '..', 'assets', 'menu.mp4');
 
 module.exports = {
   name: 'delmenuvideo',
   category: 'owner',
-  description: 'Elimina el video del menu (solo owner). Vuelve a usar la imagen o texto simple.',
+  description: 'Elimina el video del menu de ESTE grupo (solo owner). En privado borra el del menu general',
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -17,9 +14,9 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'Solo un owner del bot puede usar este comando.' });
     }
 
-    if (fs.existsSync(videoPath)) {
-      fs.unlinkSync(videoPath);
-      return sock.sendMessage(jid, { text: 'Video del menu eliminado. Se usara la imagen (si existe) o texto simple.' });
+    const { borrado, deGrupo } = borrarMenu(jid, 'vid');
+    if (borrado) {
+      return sock.sendMessage(jid, { text: deGrupo ? 'Video del menu de este grupo eliminado. Se usara la imagen del grupo, la del menu general o texto simple.' : 'Video del menu general eliminado. Se usara la imagen (si existe) o texto simple.' });
     }
 
     await sock.sendMessage(jid, { text: 'No hay ningun video configurado.' });

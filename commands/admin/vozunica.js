@@ -12,6 +12,7 @@ function extraerObjetivo(msg) {
 module.exports = {
   name: 'vozunica',
   category: 'admin',
+  menuOwner: true, // solo owner: sale en .menuowner, no en .menu
   description: 'Deja que SOLO ciertas personas puedan hablar en el grupo (al resto se les borra el mensaje), sin quitarle el admin a nadie. Uso: .vozunica @persona | .vozunica quitar @persona | .vozunica off (solo owners del bot)',
   groupOnly: true,
   execute: async (sock, jid, msg, { texto, prefix }) => {

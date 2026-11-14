@@ -70,6 +70,7 @@ function cargarComandos() {
   const categorias = fs.readdirSync(basePath);
 
   for (const categoria of categorias) {
+    if (categoria.startsWith('_')) continue; // _eliminados / _staging no son comandos activos
     const catPath = path.join(basePath, categoria);
     if (!fs.statSync(catPath).isDirectory()) continue;
 
@@ -96,6 +97,10 @@ function cargarComandos() {
               if (COMANDOS_BLOQUEADOS_EN_SUBBOT.has(alias)) continue;
               comandos.set(alias, comando);
             }
+          }
+          // Alias que funcionan pero no se listan en el menu (ej. .menu1, .menu2, ...)
+          if (Array.isArray(comando.aliasesOcultas)) {
+            for (const alias of comando.aliasesOcultas) comandos.set(alias, comando);
           }
         }
       } catch (err) {
@@ -214,6 +219,8 @@ async function iniciarSubbot() {
       vinculadoConExito = true;
       escribirStatus({ estado: 'conectado', numero: sock.user?.id?.split(':')[0] || null });
       console.log(`[subbot ${SUBBOT_ID}] Conectado correctamente.`);
+      // .cerrar <tiempo>: el subbot tambien abre solo los grupos que el cerro con tiempo
+      try { require('./lib/cierre-grupos').iniciarVigilanteCierres(sock); } catch (err) { console.error(`[subbot ${SUBBOT_ID}] No pude iniciar el vigilante de cierres:`, err.message); }
     }
 
     if (connection === 'close') {
@@ -234,6 +241,11 @@ async function iniciarSubbot() {
     const msg = messages[0];
     if (!msg?.message) return;
 
+    // Usuarios bloqueados con .bloquear: se ignoran (los mensajes del propio dueño del subbot no)
+    try {
+      if (!msg.key.fromMe && require('./lib/bloqueos').estaBloqueado(msg)) return;
+    } catch (e) { console.error('[bloqueos]', e); }
+
     const jid = msg.key.remoteJid;
     const texto = (
       msg.message.conversation ||
@@ -250,7 +262,22 @@ async function iniciarSubbot() {
     // llegan marcados como "fromMe". Ya no descartamos esos mensajes por
     // default -- solo ignoramos cualquier mensaje (sea fromMe o no) que no
     // empiece con el prefijo, para no reprocesar las respuestas del bot.
-    if (!texto.startsWith(prefix)) return;
+    if (!texto.startsWith(prefix)) {
+      // Juegos que esperan una respuesta escrita (trivia, adivina, ppt, 3 en raya...). Se ignoran los mensajes del propio
+      // numero (fromMe) porque ahi llegan tambien los textos que manda el bot y se confundirian con respuestas.
+      if (!texto || msg.key.fromMe) return;
+      try {
+        const { obtenerJuego, terminarJuego } = require('./lib/juegos');
+        const juego = obtenerJuego(jid);
+        if (juego) {
+          try { await juego.manejarRespuesta(sock, jid, msg, texto); } catch (err) { console.error(`[subbot ${SUBBOT_ID}] Error en el juego:`, err); terminarJuego(jid); }
+        } else if (jid.endsWith('@g.us')) {
+          const tresRaya = comandos.get('3raya');
+          if (tresRaya && tresRaya.manejarNumeroSuelto) await tresRaya.manejarNumeroSuelto(sock, jid, msg, texto);
+        }
+      } catch (err) { console.error(`[subbot ${SUBBOT_ID}] Error leyendo respuesta de juego:`, err); }
+      return;
+    }
 
     const args = texto.slice(prefix.length).trim().split(/\s+/);
     const nombreComando = (args[0] || '').toLowerCase();
@@ -265,6 +292,9 @@ async function iniciarSubbot() {
       const debeResponder = registrarPresenciaYDecidir(jid, SUBBOT_ID);
       if (!debeResponder) return;
     }
+
+    // NSFW: la misma regla que el bot principal (apagado por defecto, solo mayores de 18 registrados)
+    if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comando, { prefix }))) return;
 
     if (comando.category === 'download') {
       const registro = leerRegistro();

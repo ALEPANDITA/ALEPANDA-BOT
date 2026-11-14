@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 const LIMITE_VIDEO_GIF = 10;
 const LIMITE_AUDIO = 40;
@@ -16,9 +17,8 @@ function rutaMedia(tipo, jid) {
 }
 
 async function esAdmin(sock, jid, msg) {
-  const metadata = await sock.groupMetadata(jid);
-  const remitente = msg.key.participant;
-  return !!metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, msg.key.participant || msg.key.remoteJid, msg);
+  return esAdmin; // incluye al super owner del bot
 }
 
 function obtenerMediaCitada(msg) {
@@ -132,7 +132,7 @@ function comandoTexto(tipo) {
   return {
     name: nombre,
     category: 'admin',
-    description: `Cambia el texto de ${etiqueta}. Usa #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo#`,
+    description: `Cambia el texto de ${etiqueta}. Usa #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo# #admins#`,
     groupOnly: true,
     execute: async (sock, jid, msg, { texto, prefix }) => {
       if (!(await esAdmin(sock, jid, msg))) {
@@ -142,7 +142,7 @@ function comandoTexto(tipo) {
       const nuevoTexto = texto.slice((prefix + nombre + ' ').length).trim();
       if (!nuevoTexto) {
         return sock.sendMessage(jid, {
-          text: `Uso: ${prefix}${nombre} <texto>\nPlaceholders: #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo#\nEjemplo: ${prefix}${nombre} 🐼 #numberuser# llego al clan de #namegp#`
+          text: `Uso: ${prefix}${nombre} <texto>\nPlaceholders: #numberuser# #decgrupo# #namegp# #hora# #numerobot# #prefijo# #admins# (etiqueta a los admins del grupo)\nEjemplo: ${prefix}${nombre} 🐼 #numberuser# llego al clan de #namegp#`
         });
       }
 
