@@ -53,7 +53,7 @@ function podarCacheMetadataGrupos() {
 
 const EMOJIS_POR_CATEGORIA = {
   download: '🔍', fun: '🎉', admin: '🛠️', economia: '💰', casino: '🎰',
-  owner: '👑', ia: '🤖', general: 'ℹ️', perfil: '🪪', default: '⚡', nsfw: '💗'
+  owner: '👑', ia: '🤖', general: 'ℹ️', perfil: '🪪', default: '⚡', nsfw: '💗', arcade: '🕹️'
 };
 
 function normalizarComando(texto) {
@@ -844,5 +844,8 @@ async function startBot() {
     }
   });
 }
+
+// Arcade: mini servidor web de los juegos (idempotente; si el puerto esta ocupado solo avisa en consola)
+try { require('./lib/arcade-web').iniciar(); } catch (err) { console.error('[arcade] no pude iniciar el servidor web:', err.message); }
 
 startBot();
