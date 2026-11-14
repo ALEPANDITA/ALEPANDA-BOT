@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 const LIMITE_VIDEO_GIF = 10;
 const LIMITE_AUDIO = 40;
@@ -16,9 +17,8 @@ function rutaMedia(tipo, jid) {
 }
 
 async function esAdmin(sock, jid, msg) {
-  const metadata = await sock.groupMetadata(jid);
-  const remitente = msg.key.participant;
-  return !!metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, msg.key.participant || msg.key.remoteJid, msg);
+  return esAdmin; // incluye al super owner del bot
 }
 
 function obtenerMediaCitada(msg) {

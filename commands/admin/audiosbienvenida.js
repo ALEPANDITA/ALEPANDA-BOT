@@ -2,11 +2,11 @@
 // .welcomeaudio / .byeaudio  -> audios extra de bienvenida / despedida (varios por grupo)
 
 const audios = require('../../lib/audiosbienvenida');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 async function esAdmin(sock, jid, msg) {
-  const metadata = await sock.groupMetadata(jid);
-  const remitente = msg.key.participant || msg.key.remoteJid;
-  return !!metadata.participants.find((p) => p.jid === remitente || p.id === remitente || p.lid === remitente)?.admin;
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, msg.key.participant || msg.key.remoteJid, msg);
+  return esAdmin; // incluye al super owner del bot
 }
 
 function audioDelMensaje(msg) {

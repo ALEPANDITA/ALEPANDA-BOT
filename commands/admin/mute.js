@@ -1,12 +1,13 @@
 const { leerDB, guardarDB, getGrupo } = require('../../lib/db');
 const { resolverJidReal } = require('../../lib/identidad');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 async function cambiarMute(sock, jid, msg, accion) {
   const metadata = await sock.groupMetadata(jid);
   const remitente = msg.key.participant || msg.key.remoteJid;
-  const participante = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente);
+  const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente, msg); // incluye al super owner del bot
 
-  if (!participante?.admin) {
+  if (!esAdmin) {
     return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
   }
 

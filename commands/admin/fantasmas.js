@@ -1,5 +1,6 @@
 const { leerDB, getGrupo } = require('../../lib/db');
 const { resolverJidReal } = require('../../lib/identidad');
+const { esAdminDelGrupo } = require('../../lib/permisos');
 
 // "5217712345678:12@s.whatsapp.net" -> "5217712345678" ; "123456@lid" -> "123456"
 const soloNumero = (id) => String(id || '').split('@')[0].split(':')[0];
@@ -81,9 +82,9 @@ module.exports = {
   execute: async (sock, jid, msg, { texto }) => {
     const metadata = await sock.groupMetadata(jid);
     const remitente = msg.key.participant || msg.key.remoteJid;
-    const quienEscribe = metadata.participants.find(p => p.jid === remitente || p.id === remitente || p.lid === remitente);
+    const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente, msg); // incluye al super owner del bot
 
-    if (!quienEscribe?.admin) {
+    if (!esAdmin) {
       return sock.sendMessage(jid, { text: 'Solo un admin puede usar este comando.' });
     }
 
