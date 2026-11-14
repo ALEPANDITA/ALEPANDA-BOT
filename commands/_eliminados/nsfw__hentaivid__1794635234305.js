@@ -2,7 +2,7 @@ const { advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
   name: 'hentaivid',
-  aliases: ['hvideo', 'hentai'],
+  aliases: ['hvideo'],
   category: 'nsfw',
   description: 'Busca y envia un video hentai aleatorio. Uso: .hentaivid',
   execute: async (sock, jid, msg, { prefix }) => {
