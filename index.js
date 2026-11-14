@@ -814,12 +814,16 @@ async function startBot() {
         })?.admin;
       }
 
-      if (grupoCheck.soloAdmins && !esAdminCheck && !esOwnerCheck) return;
-
+      // Modo admin + permisos por categoria: una categoria puesta en "todos" (.permisos <categoria> todos) queda abierta aunque haya modo admin
       const categoriaComando = comando.category || 'general';
-      const permisoCategoria = grupoCheck.permisosCategorias?.[categoriaComando];
-
-      if (permisoCategoria === 'admins' && !esAdminCheck && !esOwnerCheck) {
+      const acceso = require('./lib/acceso-categoria').decidirAcceso({
+        soloAdmins: !!grupoCheck.soloAdmins,
+        permisoCategoria: grupoCheck.permisosCategorias?.[categoriaComando],
+        esAdmin: !!esAdminCheck,
+        esOwner: !!esOwnerCheck
+      });
+      if (acceso === 'modo-admin') return;
+      if (acceso === 'categoria-admins') {
         return sock.sendMessage(jid, { text: `Los comandos de la categoria *${categoriaComando}* solo pueden ser usados por admins.` });
       }
     }

@@ -40,6 +40,15 @@ module.exports = {
       }
     }
 
+    const abiertas = Object.entries(permisos).filter(([, v]) => v === 'todos');
+    if (grupo.soloAdmins && abiertas.length) {
+      texto += `───────────────\n`;
+      texto += `✅ Categorias abiertas para todos (aunque haya modo admin):\n`;
+      for (const [cat] of abiertas) {
+        texto += `   ▸ ${cat}\n`;
+      }
+    }
+
     texto += `\n🐼 ALEPANDA BOT`;
 
     await sock.sendMessage(jid, { text: texto });
