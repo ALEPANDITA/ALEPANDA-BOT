@@ -738,6 +738,11 @@ async function startBot() {
       if (texto && !texto.startsWith(prefix) && await require('./lib/crearcmd-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
     } catch (e) { console.error('[crearcmd-plan]', e); }
 
+    // .repararcmd: el owner responde (citando) al plan de limpieza con "si" / "cancelar" / "conserva los de fun"
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/cmdmaint-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[cmdmaint-plan]', e); }
+
     const { obtenerJuego, terminarJuego } = require('./lib/juegos');
     const juegoActivo = obtenerJuego(jid);
     if (juegoActivo && texto && !texto.startsWith(prefix)) {
