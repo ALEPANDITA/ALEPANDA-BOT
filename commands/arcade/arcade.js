@@ -1,3 +1,5 @@
+// PARCHE-PANEL aplicado
+// PARCHE-FLAPPY aplicado
 // ARCADE: juegos web que pagan monedas al saldo.
 //   .arcade               -> sala de juegos: lista y como se juega
 //   .flappy               -> tu link personal de Flappy Fox        (.flappy nuevo = link nuevo)
@@ -12,6 +14,7 @@ const { esOwnerBot, resolverLid } = require('../../lib/permisos');
 const arcade = require('../../lib/arcade');
 const web = require('../../lib/arcade-web');
 const { marco, fmt, lineasPremios, REGLA } = require('../../lib/arcade-ui');
+const { enviarComoPanel } = require('../../lib/arcade-panel');
 
 // Ids con los que se puede reconocer a quien escribe (JID, LID y sus versiones alternas si Baileys las trae)
 function idsBasicos(msg) {
@@ -22,7 +25,11 @@ async function idsConResolucion(sock, msg) {
   const crudo = (msg.key || {}).participant || (msg.key || {}).remoteJid;
   let resuelto = null;
   try { resuelto = await resolverLid(sock, crudo); } catch (_) { resuelto = null; }
-  return arcade.idsDe(crudo, resuelto, ...idsBasicos(msg));
+  let pn = null;
+  try {
+    pn = await Promise.race([Promise.resolve(sock.signalRepository?.lidMapping?.getPNForLID?.(crudo)), new Promise((r) => setTimeout(() => r(null), 2000))]);
+  } catch (_) { pn = null; }
+  return arcade.idsDe(crudo, resuelto, pn, ...idsBasicos(msg));
 }
 
 const argumentos = (texto, prefix) => String(texto || '').trim().slice(prefix.length).trim().split(/\s+/).slice(1).filter(Boolean);
@@ -63,6 +70,29 @@ async function enviarComoArchivo({ sock, jid, msg, juego, prefix, ids, nueva, cf
   }, { quoted: msg });
 }
 
+// Boton nativo de WhatsApp: se abre DENTRO de WhatsApp (Android y iPhone), sin mandarte a Google.
+async function enviarBotonJugar(sock, jid, msg, juego, enlace) {
+  try {
+    const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys');
+    const IM = proto.Message.InteractiveMessage;
+    const interactiveMessage = IM.create({
+      body: IM.Body.fromObject({ text: `${juego.emoji} *${juego.titulo}*\nToca el botón y juega aquí mismo en WhatsApp 👇` }),
+      footer: IM.Footer.fromObject({ text: 'ALEPANDA ARCADE' }),
+      header: IM.Header.fromObject({ title: '', hasMediaAttachment: false }),
+      nativeFlowMessage: IM.NativeFlowMessage.fromObject({
+        buttons: [{ name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: `🎮 JUGAR ${juego.titulo.toUpperCase()}`, url: enlace, merchant_url: enlace }) }]
+      })
+    });
+    const contenido = proto.Message.fromObject({ viewOnceMessage: { message: { messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 }, interactiveMessage } } });
+    const m = generateWAMessageFromContent(jid, contenido, { quoted: msg });
+    await sock.relayMessage(jid, m.message, { messageId: m.key.id });
+    return true;
+  } catch (err) {
+    console.warn('[arcade] el boton fallo, mando el link normal:', err.message);
+    return false;
+  }
+}
+
 async function enviarComoLink({ sock, jid, msg, juego, prefix, ids, nueva, cfg }) {
   const responder = (t) => sock.sendMessage(jid, { text: t }, { quoted: msg });
   const srv = web.estadoServidor();
@@ -98,7 +128,7 @@ async function enviarComoLink({ sock, jid, msg, juego, prefix, ids, nueva, cfg }
     ...lineasPremios(cfg),
     `⏳ Dura ~${horas} h · 🤫 es solo tuyo, no lo compartas`
   ], { titulo: juego.titulo.toUpperCase(), emoji: juego.emoji }));
-  await sock.sendMessage(jid, { text: enlace });
+  if (!(await enviarBotonJugar(sock, jid, msg, juego, enlace))) await sock.sendMessage(jid, { text: enlace });
 }
 
 function comandoJuego(juego) {
@@ -116,6 +146,7 @@ function comandoJuego(juego) {
       if (!ids.length) return sock.sendMessage(jid, { text: 'No pude identificarte, intenta de nuevo.' });
 
       const datos = { sock, jid, msg, juego, prefix, ids, nueva, cfg };
+      if (cfg.modo === 'panel') return enviarComoPanel(datos, enviarComoArchivo);
       return cfg.modo === 'link' ? enviarComoLink(datos) : enviarComoArchivo(datos);
     }
   };
@@ -262,7 +293,7 @@ async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
     const enLink = cfg.modo === 'link';
     const base = enLink ? await web.urlBase() : null;
     const lineas = [
-      `🎛️ Modo: *${enLink ? 'link (página web del bot)' : 'archivo (se juega directo en WhatsApp)'}*`,
+      `🎛️ Modo: *${enLink ? 'link (página web del bot)' : (cfg.modo === 'panel' ? 'panel (se abre dentro de WhatsApp)' : 'archivo (se juega directo en WhatsApp)')}*`,
       ...(enLink ? [
         `🌐 Servidor web: ${srv.escuchando ? '*encendido* ✅' : `*apagado* ❌${srv.error ? ` (${srv.error})` : ''}`}`,
         `🔌 Puerto: *${srv.puerto}*`,
@@ -286,7 +317,8 @@ async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
         `Modo actual: *${cfg.modo}*`,
         '',
         `📎 *${prefix}arcade modo archivo* ➜ el bot manda el juego como archivo y se juega directo en WhatsApp (sin servidor, sin puertos)`,
-        `🔗 *${prefix}arcade modo link* ➜ el bot manda un link a su página web (necesita puerto abierto)`
+        `🔗 *${prefix}arcade modo link* ➜ el bot manda un link a su página web (necesita puerto abierto)`,
+        `🪟 *${prefix}arcade modo panel* ➜ el juego se abre DENTRO de WhatsApp (sin servidor ni HTTPS)`
       ], 'ARCADE · MODO'));
     }
     const r = arcade.cambiarConfig('modo', args[0]);
@@ -303,6 +335,10 @@ async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
         `*sudo ufw allow ${srv.puerto}/tcp*`,
         `Revisa la dirección con *${prefix}arcade estado*`
       ], 'ARCADE · MODO'));
+    }
+    if (r.valor === 'panel') {
+      await web.detener();
+      return responder(caja(['✅ Modo *panel* activado: el juego se abre DENTRO de WhatsApp (sin servidor ni HTTPS).', 'Si tu WhatsApp no lo soporta, el bot manda el archivo como respaldo.'], 'ARCADE · MODO'));
     }
     await web.detener();
     return responder(caja(['✅ Modo *archivo* activado: ahora el juego se manda como archivo y se juega directo desde WhatsApp.', '🔌 Apagué el servidor web (ya no hace falta).'], 'ARCADE · MODO'));
