@@ -7,7 +7,9 @@
 //   .arcade top           -> ranking por mejor puntaje
 //   Solo owner: .arcade modo <archivo|link> · .arcade estado · .arcade config [clave valor]
 //               (solo modo link) .arcade url <http://IP:8787 | https://dominio | auto> · .arcade puerto <n>
-// Para sumar otro juego: su .html en assets/arcade/ + una entrada en CATALOGO de lib/arcade.js (los comandos salen solos).
+//               .arcade juegos (los instalados con .crearcmd) · .arcade quitar <id>
+// Para sumar otro juego: mandale su .html a .crearcmd (lib/arcade-crear.js) o, a mano, su .html en assets/arcade/ + una
+// entrada en CATALOGO de lib/arcade.js (los comandos salen solos).
 // Diseño de los mensajes: lib/arcade-ui.js
 const { leerConfig } = require('../../lib/config');
 const { esOwnerBot, resolverLid } = require('../../lib/permisos');
@@ -136,6 +138,7 @@ function comandoJuego(juego) {
     name: juego.comandos[0],
     aliases: juego.comandos.slice(1),
     category: 'arcade',
+    _juegoId: juego.id,
     description: `${juego.emoji} ${juego.titulo}: te mando el juego para jugar directo desde WhatsApp y ganar monedas (se cobra con .reclamar)`,
     execute: async (sock, jid, msg, { prefix, texto }) => {
       const arg = argumentos(texto, prefix).join(' ').toLowerCase();
@@ -166,7 +169,7 @@ const reclamar = {
       return responder(marco([
         '🎟️ Pega aquí el boleto que te dio la página del juego al perder.',
         '',
-        `Ejemplo: *${prefix}reclamar FOX-ABC234-0A031B2C9D4E5F6A7B*`,
+        `Ejemplo: *${prefix}reclamar FOX-ABC234-0A031B2C9D4E5F6A7*`,
         '',
         `¿Aún no tienes link? Usa *${prefix}flappy* 🦊`
       ], { titulo: 'COBRAR BOLETO', emoji: '🎟️' }));
@@ -230,18 +233,18 @@ const arcadeCmd = {
   aliases: ['minijuegos'],
   category: 'arcade',
   description: 'Sala de juegos web que pagan monedas a tu saldo (.arcade top = ranking)',
-  execute: async (sock, jid, msg, { prefix, texto }) => {
+  execute: async (sock, jid, msg, { prefix, texto, comandos }) => {
     const args = argumentos(texto, prefix);
     const sub = (args[0] || '').toLowerCase();
     const cfg = arcade.leerConfigArcade();
 
     // Subcomandos solo para el owner
-    if (['modo', 'url', 'puerto', 'config', 'configurar', 'estado'].includes(sub)) {
+    if (['modo', 'url', 'puerto', 'config', 'configurar', 'estado', 'quitar', 'juegos'].includes(sub)) {
       const config = leerConfig();
       if (!(await esOwnerBot(sock, config, msg))) {
         return sock.sendMessage(jid, { text: marco(['⚠️ Eso solo lo puede usar un owner del bot.'], { titulo: 'SIN PERMISOS', emoji: '👑' }) }, { quoted: msg });
       }
-      return subOwner({ sock, jid, msg, prefix, sub, args: args.slice(1), cfg });
+      return subOwner({ sock, jid, msg, prefix, sub, args: args.slice(1), cfg, comandos });
     }
 
     if (sub === 'top' || sub === 'ranking') {
@@ -283,9 +286,29 @@ const arcadeCmd = {
   }
 };
 
-async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
+async function subOwner({ sock, jid, msg, prefix, sub, args, cfg, comandos }) {
   const responder = (t) => sock.sendMessage(jid, { text: t }, { quoted: msg });
   const caja = (lineas, titulo) => marco(lineas, { titulo, emoji: '👑' });
+
+  // Juegos instalados con .crearcmd (assets/arcade/juegos/)
+  if (sub === 'juegos') {
+    const extras = arcade.listarJuegos().filter((j) => j.esExtra);
+    const avisos = arcade.extras.avisos(arcade.reservadosPropios());
+    const lineas = extras.length
+      ? extras.flatMap((j) => [`${j.emoji} *${j.titulo}* · id *${j.id}* · boleto *${j.tag}-*`, `   ↳ ${prefix}${j.comandos[0]} · quitar: *${prefix}arcade quitar ${j.id}*`])
+      : ['Todavía no hay juegos instalados con *' + prefix + 'crearcmd*.', 'Manda un archivo .html con ' + prefix + 'crearcmd para instalar uno.'];
+    for (const a of avisos) lineas.push(`⚠️ Ignorado: ${a}`);
+    return responder(caja(lineas, 'ARCADE · JUEGOS INSTALADOS'));
+  }
+
+  if (sub === 'quitar') {
+    const id = String(args[0] || '').toLowerCase();
+    if (!id) return responder(caja([`Uso: *${prefix}arcade quitar <id>*`, `Mira los ids con *${prefix}arcade juegos*`], 'ARCADE · QUITAR'));
+    const r = arcade.extras.quitar(id, arcade.reservadosPropios());
+    if (!r.ok) return responder(caja([`⚠️ ${r.motivo}`], 'ARCADE · QUITAR'));
+    if (comandos) for (const k of [...comandos.keys()]) { const c = comandos.get(k); if (c && c._juegoId === id) comandos.delete(k); }
+    return responder(caja([`✅ *${r.juego.titulo}* quitado y sus comandos desactivados.`, 'Los archivos quedaron en assets/arcade/juegos/_quitados/ por si te arrepientes.'], 'ARCADE · QUITAR'));
+  }
 
   if (sub === 'estado') {
     const srv = web.estadoServidor();
@@ -404,4 +427,7 @@ async function subOwner({ sock, jid, msg, prefix, sub, args, cfg }) {
   ], 'ARCADE · CONFIG'));
 }
 
-module.exports = [arcadeCmd, reclamar, ...arcade.listarJuegos().map(comandoJuego)];
+const exportados = [arcadeCmd, reclamar, ...arcade.listarJuegos().map(comandoJuego)];
+// La fabrica queda a la mano (no enumerable, el cargador de comandos no la ve) para activar juegos nuevos en caliente
+Object.defineProperty(exportados, 'comandoJuego', { value: comandoJuego, enumerable: false });
+module.exports = exportados;

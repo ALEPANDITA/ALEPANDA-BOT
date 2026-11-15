@@ -736,6 +736,11 @@ async function startBot() {
 
     if (bloqueado) return;
 
+    // El owner responde (citando) al plan de un juego HTML que mando a .crearcmd
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/arcade-crear').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[arcade-crear]', e); }
+
     // El owner responde (citando) a un plan de .crearcmd / .arreglarcmd: sigue la charla
     try {
       if (texto && !texto.startsWith(prefix) && await require('./lib/crearcmd-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
