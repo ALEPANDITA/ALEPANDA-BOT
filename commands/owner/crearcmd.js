@@ -27,7 +27,7 @@ module.exports = {
     if (html && html.error) return sock.sendMessage(jid, { text: advertencia(html.error, { titulo: 'ARCHIVO NO VALIDO', estilo: 'neon' }) }, { quoted: msg });
     if (html) {
       plan.descartarPlan(jid);
-      return arcadeCrear.iniciar({ sock, jid, msg, comandos, prefix, html: html.html, nombre: html.nombre, origen: html.origen });
+      return arcadeCrear.iniciar({ sock, jid, msg, comandos, prefix, html: html.html, nombre: html.nombre, origen: html.origen, instrucciones: html.origen === 'archivo' ? texto.replace(/^\s*\S+[ \t]*/, '').trim() : '' });
     }
     if (arcadeCrear.obtenerSesion(jid) && argumentos && !/^nuevo\b/i.test(argumentos)) {
       return arcadeCrear.continuar({ sock, jid, msg, texto: argumentos, comandos, prefix });
