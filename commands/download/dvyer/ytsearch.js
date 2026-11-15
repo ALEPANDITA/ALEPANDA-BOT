@@ -1,10 +1,9 @@
 const { buscarYoutubeVarios, limpiarTexto } = require('../../../lib/dvyerapi');
 const { guardarBusqueda } = require('../../../lib/busquedas');
-const { generateWAMessageFromContent, generateWAMessage, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
+const baileys = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = baileys;
 
-// Se pide un "pool" mas grande de resultados de los que se muestran, y de
-// ahi se elige un subconjunto al azar cada vez. Asi, si repites el mismo
-// .ytsearch, no siempre salen exactamente los mismos videos en el mismo orden.
+// Se pide un "pool" mas grande y se muestra un subconjunto al azar.
 const TAMANO_POOL = 20;
 const CANTIDAD_A_MOSTRAR = 8;
 
@@ -31,7 +30,10 @@ function formatearVistas(numero = 0) {
   return n.toString();
 }
 
-const TIMEOUT_MEDIA_MS = 7000;
+function acortar(t = '', max = 60) {
+  return t.length > max ? t.slice(0, max - 3) + '...' : t;
+}
+
 function conTimeout(promesa, ms, mensajeError) {
   return Promise.race([
     promesa,
@@ -39,10 +41,9 @@ function conTimeout(promesa, ms, mensajeError) {
   ]);
 }
 
-// Cache en memoria de miniaturas ya subidas a los servidores de WhatsApp.
-// Si el mismo video vuelve a salir en otra busqueda (comun, sobre todo con
-// canciones/artistas populares), se reusa la subida en vez de volver a
-// descargar y re-subir la imagen. Se limpia sola cada 10 minutos.
+const TIMEOUT_MEDIA_MS = 7000;
+
+// Cache de miniaturas ya subidas a WhatsApp (se limpia sola cada 10 minutos)
 const CACHE_MEDIA_TTL_MS = 10 * 60 * 1000;
 const cacheMediaPreparada = new Map();
 
@@ -56,9 +57,7 @@ async function prepararMediaConCache(sock, url) {
   return data;
 }
 
-// Intenta primero con la libreria yt-search (busqueda directa, sin depender
-// de la API externa). Si falla -por ejemplo el bloqueo 302 que da YouTube
-// a IPs de datacenter/VPS- cae automaticamente a la API DVYER.
+// 1) Libreria yt-search (directo a YouTube)
 async function buscarConLibreria(query, limit) {
   const ytSearch = require('yt-search');
   const { videos } = await ytSearch(query);
@@ -72,9 +71,7 @@ async function buscarConLibreria(query, limit) {
   }));
 }
 
-// Tercer respaldo: instancias publicas de Invidious (frontend alterno de
-// YouTube con API de busqueda propia). Se prueban varias por si alguna
-// esta caida; no depende de scrapear youtube.com directo ni de DVYER.
+// 3) Respaldo: instancias publicas de Invidious
 const INSTANCIAS_INVIDIOUS = [
   'https://invidious.nerdvpn.de',
   'https://yewtu.be',
@@ -84,22 +81,18 @@ const INSTANCIAS_INVIDIOUS = [
 
 async function buscarConInvidious(query, limit) {
   let ultimoError;
-
   for (const instancia of INSTANCIAS_INVIDIOUS) {
     try {
       const controlador = new AbortController();
       const temporizador = setTimeout(() => controlador.abort(), 6000);
-
       const res = await fetch(
         `${instancia}/api/v1/search?q=${encodeURIComponent(query)}&type=video`,
         { signal: controlador.signal }
       );
       clearTimeout(temporizador);
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!Array.isArray(data) || !data.length) throw new Error('Sin resultados');
-
       return data.slice(0, limit).map(v => ({
         url: `https://www.youtube.com/watch?v=${v.videoId}`,
         title: v.title || '',
@@ -110,93 +103,112 @@ async function buscarConInvidious(query, limit) {
       }));
     } catch (err) {
       ultimoError = err;
-      // sigue con la siguiente instancia
     }
   }
-
   throw ultimoError || new Error('Todas las instancias de Invidious fallaron.');
 }
 
-// === INTENTO DE CARRUSEL (fork Edward-oficial/bails) ===
-// NOTA: en la version anterior de este archivo, con la libreria oficial
-// @whiskeysockets/baileys, se probo un carrusel similar y se quito porque
-// Baileys reportaba el envio como exitoso pero WhatsApp nunca lo entregaba
-// en NINGUN cliente. Este bloque prueba lo mismo pero con el fork
-// Edward-oficial/bails, que trae su propia implementacion de
-// proto.Message.InteractiveMessage.CarouselMessage. No hay garantia de que
-// funcione mejor -- es un experimento. Por eso NO se quita el flujo de
-// siempre (texto + miniaturas + botones) despues de esto: si el carrusel
-// no se ve, el resto del mensaje sigue llegando igual que antes.
-async function intentarCarrusel(sock, jid, msg, query, videos, prefix) {
-  if (!proto?.Message?.InteractiveMessage?.CarouselMessage) {
-    console.warn('[ytsearch] Este fork de Baileys no expone CarouselMessage, se omite el intento de carrusel.');
-    return false;
+// Nodo <biz> generado con la funcion del propio fork ultra-baileys. Es lo que
+// hace que WhatsApp SI entregue el carrusel (el fork no lo agrega solo porque
+// en un carrusel los botones van dentro de cada tarjeta).
+function nodoBiz() {
+  if (typeof baileys.getBizBinaryNode !== 'function') {
+    throw new Error('Este Baileys no exporta getBizBinaryNode');
   }
+  return baileys.getBizBinaryNode({
+    interactiveMessage: { nativeFlowMessage: { buttons: [{ name: 'quick_reply' }] } }
+  });
+}
 
-  try {
-    const conMiniatura = videos.filter(v => v.thumbnail);
-    if (!conMiniatura.length) return false;
+async function enviarCarrusel(sock, jid, msg, query, videos, prefix) {
+  const IM = proto.Message.InteractiveMessage;
 
-    const cards = await Promise.all(conMiniatura.map(async (v, i) => {
-      let img = null;
+  const cards = await Promise.all(videos.map(async (v, i) => {
+    let img = null;
+    if (v.thumbnail) {
       try {
         img = await conTimeout(
           prepararMediaConCache(sock, v.thumbnail),
           TIMEOUT_MEDIA_MS,
-          `Timeout preparando miniatura de la tarjeta ${i + 1}`
+          `Timeout miniatura ${i + 1}`
         );
       } catch (e) {
-        console.warn(`[ytsearch][carrusel] no se pudo preparar la miniatura ${i + 1}:`, e.message);
+        console.warn(`[ytsearch][carrusel] miniatura ${i + 1}:`, e.message);
       }
-
-      return {
-        header: proto.Message.InteractiveMessage.Header.fromObject({
-          title: v.title.length > 60 ? v.title.slice(0, 57) + '...' : v.title,
-          hasMediaAttachment: !!img,
-          imageMessage: img?.imageMessage || null
-        }),
-        body: proto.Message.InteractiveMessage.Body.fromObject({
-          text: `Canal: ${v.author || 'Desconocido'}\nDuracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}`
-        }),
-        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-          buttons: [
-            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎵 MP3', id: `${prefix}ytmp3 ${i + 1}` }) },
-            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎬 MP4', id: `${prefix}ytmp4 ${i + 1}` }) }
-          ]
-        })
-      };
-    }));
-
-    const interactiveMessage = proto.Message.InteractiveMessage.create({
-      body: proto.Message.InteractiveMessage.Body.fromObject({
-        text: `🌸 Resultados para: *${query}* (desliza para ver mas)`
+    }
+    return {
+      header: IM.Header.fromObject({
+        title: acortar(v.title, 60),
+        hasMediaAttachment: !!img,
+        imageMessage: img?.imageMessage || null
       }),
-      footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: 'ALEPANDA BOT' }),
-      header: proto.Message.InteractiveMessage.Header.fromObject({
-        title: 'YouTube',
-        subtitle: query,
-        hasMediaAttachment: false
+      body: IM.Body.fromObject({
+        text: `Canal: ${v.author || 'Desconocido'}\nDuracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}`
       }),
-      carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({ cards })
-    });
+      nativeFlowMessage: IM.NativeFlowMessage.fromObject({
+        buttons: [
+          { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎵 MP3', id: `${prefix}ytmp3 ${i + 1}` }) },
+          { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎬 MP4', id: `${prefix}ytmp4 ${i + 1}` }) }
+        ]
+      })
+    };
+  }));
 
-    const contenido = proto.Message.fromObject({
-      viewOnceMessage: {
-        message: {
-          messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
-          interactiveMessage
-        }
+  const interactiveMessage = IM.create({
+    body: IM.Body.fromObject({ text: `🌸 Resultados para: *${query}* (desliza para ver mas)` }),
+    footer: IM.Footer.fromObject({ text: 'ALEPANDA BOT' }),
+    header: IM.Header.fromObject({ title: 'YouTube', subtitle: query, hasMediaAttachment: false }),
+    carouselMessage: IM.CarouselMessage.fromObject({ cards, messageVersion: 1 })
+  });
+
+  const contenido = proto.Message.fromObject({
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+        interactiveMessage
       }
-    });
+    }
+  });
 
-    const mensajeCarrusel = generateWAMessageFromContent(jid, contenido, { quoted: msg });
-    await sock.relayMessage(jid, mensajeCarrusel.message, { messageId: mensajeCarrusel.key.id });
+  const mensaje = generateWAMessageFromContent(jid, contenido, {
+    quoted: msg,
+    userJid: sock.user?.id
+  });
 
-    console.log('[ytsearch] Carrusel enviado (sin error de Baileys -- revisa manualmente si se vio bien en el telefono).');
-    return true;
+  await sock.relayMessage(jid, mensaje.message, {
+    messageId: mensaje.key.id,
+    additionalNodes: [nodoBiz()]
+  });
+}
+
+// Respaldo si el carrusel falla: lista en texto + menus desplegables MP3/MP4
+async function enviarListaConBotones(sock, jid, msg, query, videos, prefix) {
+  const listado = videos.map((v, i) =>
+    `*${i + 1}. ${v.title}*\n` +
+    `Canal: ${v.author || 'Desconocido'} | Duracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}\n` +
+    `⬇️ ${prefix}ytmp3 ${i + 1}  |  ${prefix}ytmp4 ${i + 1}`
+  ).join('\n\n');
+
+  await sock.sendMessage(jid, { text: `🌸 Resultados para: *${query}*\n\n${listado}` }, { quoted: msg });
+
+  const filas = (cmd, icono) => videos.map((v, i) => ({
+    title: `${icono} ${i + 1}. ${acortar(v.title, 40)}`,
+    description: `${v.author || 'Desconocido'} | ${formatearDuracion(v.duration)}`,
+    id: `${prefix}${cmd} ${i + 1}`
+  }));
+
+  try {
+    await sock.sendMessage(jid, {
+      text: 'Elige un resultado para descargar 👇',
+      footer: 'ALEPANDA BOT',
+      title: 'YouTube',
+      buttons: [
+        { text: '🎵 Descargar MP3', sections: [{ title: 'Audio', rows: filas('ytmp3', '🎵') }] },
+        { text: '🎬 Descargar MP4', sections: [{ title: 'Video', rows: filas('ytmp4', '🎬') }] }
+      ]
+    }, { quoted: msg });
   } catch (err) {
-    console.warn('[ytsearch] El intento de carrusel fallo con error real:', err.message);
-    return false;
+    console.warn('[ytsearch] No se pudieron mandar los botones. Detalle:', err.message);
   }
 }
 
@@ -219,7 +231,7 @@ module.exports = {
     try {
       videos = await conTimeout(buscarConLibreria(query, TAMANO_POOL), 8000, 'Timeout en yt-search');
     } catch (err) {
-      console.warn('[ytsearch] yt-search fallo, probando API DVYER de respaldo. Detalle:', err.message);
+      console.warn('[ytsearch] yt-search fallo, probando API DVYER. Detalle:', err.message);
     }
 
     if (!videos.length) {
@@ -227,7 +239,7 @@ module.exports = {
         videos = await buscarYoutubeVarios(query, TAMANO_POOL);
       } catch (err) {
         if (err.code === 'NO_API_KEY') errorApiKey = err.message;
-        console.warn('[ytsearch] API DVYER tambien fallo, probando Invidious. Detalle:', err.message);
+        console.warn('[ytsearch] API DVYER fallo, probando Invidious. Detalle:', err.message);
       }
     }
 
@@ -246,129 +258,15 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'No se encontraron resultados.' });
     }
 
-    // De todo el pool encontrado, se elige al azar la cantidad a mostrar,
-    // para que repetir el mismo .ytsearch no siempre traiga exactamente lo mismo.
     videos = mezclarArray(videos).slice(0, CANTIDAD_A_MOSTRAR);
-
     guardarBusqueda(jid, videos);
 
-    // Carrusel deslizable (fork Edward-oficial/bails). Si se manda bien,
-    // este es el UNICO mensaje que se envia (no se duplica con texto/miniaturas/botones).
-    // Solo si falla, se usa el flujo de respaldo de siempre (texto + miniaturas + botones).
-    const carruselEnviado = await intentarCarrusel(sock, jid, msg, query, videos, prefix);
-    if (carruselEnviado) return;
-
-    const acortar = (t) => (t.length > 55 ? t.slice(0, 52) + '...' : t);
-
-    const listado = videos.map((v, i) =>
-      `*${i + 1}. ${v.title}*\n` +
-      `Canal: ${v.author || 'Desconocido'} | Duracion: ${formatearDuracion(v.duration)} | Vistas: ${formatearVistas(v.views)}\n` +
-      `⬇️ ${prefix}ytmp3 ${i + 1}  |  ${prefix}ytmp4 ${i + 1}`
-    ).join('\n\n');
-
-    await sock.sendMessage(jid, {
-      text: `🌸 Resultados para: *${query}*\n\n${listado}`
-    });
-
-    // Miniaturas agrupadas en un solo mensaje tipo "album" (igual que cuando mandas
-    // varias fotos juntas manualmente en WhatsApp). @whiskeysockets/baileys NO trae
-    // un helper "sendAlbumMessage" (es una funcion que solo agregaron algunos forks
-    // comunitarios, y de hecho el soporte de albumes sigue como issue abierto sin
-    // resolver en el repo oficial: github.com/WhiskeySockets/Baileys/issues/775).
-    //
-    // Aun asi, se puede construir a mano con las piezas que SI son oficiales:
-    // 1) Se manda un mensaje "albumMessage" vacio, avisando cuantas imagenes vienen.
-    // 2) Cada imagen se manda por separado, pero enlazada a ese mensaje via
-    //    messageContextInfo.messageAssociation (asociandola como "hija" del album).
-    // Esto replica lo que hacen los forks que si lo soportan, pero es un formato
-    // NO documentado oficialmente por WhatsApp/Baileys, asi que no hay garantia total
-    // de que WhatsApp lo renderice igual en todos los clientes/versiones. Si falla,
-    // cae automaticamente al metodo de siempre (miniaturas sueltas).
-    const conMiniatura = videos.filter(v => v.thumbnail);
-
-    let albumEnviado = false;
-    if (conMiniatura.length > 1) {
-      try {
-        const miJid = sock.user?.id || sock.authState?.creds?.me?.id;
-
-        const mensajeAlbum = generateWAMessageFromContent(jid, {
-          albumMessage: {
-            expectedImageCount: conMiniatura.length,
-            expectedVideoCount: 0
-          }
-        }, { userJid: miJid, quoted: msg });
-
-        await sock.relayMessage(jid, mensajeAlbum.message, { messageId: mensajeAlbum.key.id });
-
-        for (const v of conMiniatura) {
-          const mensajeImagen = await conTimeout(
-            generateWAMessage(jid, {
-              image: { url: v.thumbnail },
-              caption: `${videos.indexOf(v) + 1}`
-            }, { upload: sock.waUploadToServer }),
-            TIMEOUT_MEDIA_MS,
-            `Timeout preparando la miniatura ${videos.indexOf(v) + 1} del album`
-          );
-
-          mensajeImagen.message.messageContextInfo = {
-            messageAssociation: { associationType: 1, parentMessageKey: mensajeAlbum.key }
-          };
-
-          await sock.relayMessage(jid, mensajeImagen.message, { messageId: mensajeImagen.key.id });
-        }
-
-        albumEnviado = true;
-        console.log('[ytsearch] Album armado a mano y enviado.');
-      } catch (err) {
-        console.warn('[ytsearch] El album armado a mano fallo, se manda cada miniatura por separado. Detalle:', err.message);
-      }
-    }
-
-    if (!albumEnviado) {
-      for (let i = 0; i < videos.length; i++) {
-        const v = videos[i];
-        try {
-          if (v.thumbnail) {
-            await sock.sendMessage(jid, { image: { url: v.thumbnail }, caption: `${i + 1}` });
-          }
-          console.log(`[ytsearch] resultado ${i + 1}/${videos.length} enviado`);
-        } catch (err) {
-          console.error(`[ytsearch] error enviando miniatura ${i + 1}/${videos.length}:`, err.message);
-        }
-      }
-    }
-
-    // Botones nativos reales de descarga (MP3/MP4) por resultado.
-    // La lista/botones normales de Baileys (sock.sendMessage con "sections" o
-    // "buttons") estan rotos en la libreria oficial actual: le faltan unos
-    // "nodos binarios" internos que WhatsApp exige para que se vean. En vez de
-    // cambiar de libreria entera (riesgo alto, ver conversacion), usamos
-    // baileys_helper: un paquete pequeño y ya revisado que SOLO agrega esa
-    // pieza faltante, sin tocar ni reemplazar la libreria oficial.
-    //
-    // Limitamos a los primeros 5 resultados (10 botones) para no saturar el
-    // mensaje; el resto se puede pedir igual escribiendo .ytmp3/.ytmp4 <numero>.
     try {
-      const { sendButtons } = require('baileys_helper');
-      const limite = Math.min(videos.length, 5);
-      const botones = [];
-      for (let i = 0; i < limite; i++) {
-        botones.push({ name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: `🎵 MP3 #${i + 1}`, id: `${prefix}ytmp3 ${i + 1}` }) });
-        botones.push({ name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: `🎬 MP4 #${i + 1}`, id: `${prefix}ytmp4 ${i + 1}` }) });
-      }
-
-      await sendButtons(sock, jid, {
-        text: `Toca un boton para descargar (resultados 1-${limite}).${videos.length > limite ? `\nPara los demas, escribe ${prefix}ytmp3 <numero> o ${prefix}ytmp4 <numero>.` : ''}`,
-        footer: 'ALEPANDA BOT',
-        buttons: botones
-      });
-
-      console.log('[ytsearch] Botones nativos (baileys_helper) enviados.');
+      await enviarCarrusel(sock, jid, msg, query, videos, prefix);
+      console.log('[ytsearch] Carrusel enviado.');
     } catch (err) {
-      console.warn('[ytsearch] No se pudieron mandar los botones nativos, usa los comandos .ytmp3/.ytmp4 manuales. Detalle:', err.message);
-      await sock.sendMessage(jid, {
-        text: `Para descargar, escribe ${prefix}ytmp3 <numero> o ${prefix}ytmp4 <numero> segun el resultado que quieras.`
-      });
+      console.warn('[ytsearch] El carrusel fallo, mando la lista con botones. Detalle:', err.message);
+      await enviarListaConBotones(sock, jid, msg, query, videos, prefix);
     }
   }
 };

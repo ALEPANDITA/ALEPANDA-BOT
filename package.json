@@ -15,7 +15,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@napi-rs/canvas": "^0.1.100",
-    "@whiskeysockets/baileys": "github:Edward-oficial/bails",
+    "@whiskeysockets/baileys": "github:russellxz/ultra-baileys",
     "chalk": "^4.1.2",
     "figlet": "^1.11.0",
     "gradient-string": "^3.0.0",

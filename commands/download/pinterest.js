@@ -1,5 +1,6 @@
 const { buscarPinterest, enviarPin } = require('../../lib/pinterestapi');
 const { guardarBusqueda } = require('../../lib/busquedas');
+const { enviarCarrusel } = require('../../lib/carrusel');
 const { cargando, advertencia, error: cajaError } = require('../../lib/estilo');
 
 module.exports = {
@@ -16,8 +17,7 @@ module.exports = {
       });
     }
 
-    // Si mandaron un link directo, se mantiene el comportamiento de siempre:
-    // descarga inmediata de ese pin, sin pasar por la busqueda.
+    // Link directo: descarga inmediata de ese pin
     if (/pinterest\.|pin\.it/.test(input)) {
       await sock.sendMessage(jid, { text: cargando('Descargando el pin...', { titulo: 'PINTEREST' }) });
       try {
@@ -30,7 +30,6 @@ module.exports = {
       return;
     }
 
-    // Busqueda por palabra clave -> carrusel deslizable, mismo estilo que .ytsearch
     let resultados = [];
     try {
       resultados = await buscarPinterest(input, 6);
@@ -46,62 +45,47 @@ module.exports = {
 
     guardarBusqueda(jid, resultados);
 
-    const acortar = (t) => (t && t.length > 55 ? t.slice(0, 52) + '...' : (t || 'Pin sin titulo'));
+    const acortar = (t, max = 55) => (t && t.length > max ? t.slice(0, max - 3) + '...' : (t || 'Pin sin titulo'));
 
-    // 1) Intento principal: carrusel deslizable (una tarjeta por pin), igual
-    // que .ytsearch. Si el cliente/fork no lo soporta, cae al respaldo de abajo.
-    let carruselEnviado = false;
+    // 1) Carrusel deslizable (una tarjeta por pin)
     try {
-      await sock.sendMessage(jid, {
-        text: `📌 Resultados para: *${input}*`,
+      await enviarCarrusel(sock, jid, msg, {
+        texto: `📌 Resultados para: *${input}* (desliza para ver mas)`,
         footer: 'ALEPANDA BOT',
-        title: '🌸 Desliza para ver mas resultados',
-        cards: resultados
-          .filter(p => p.image)
-          .map((p, i) => ({
-            image: { url: p.image },
-            title: acortar(p.title),
-            body: `Resultado ${i + 1} de ${resultados.length}`,
-            footer: 'Pinterest',
-            buttons: [
-              { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '📌 Descargar', id: `${prefix}pindl ${i + 1}` }) }
-            ]
-          }))
-      }, { quoted: msg });
-      carruselEnviado = true;
-      console.log('[pinterest] Carrusel deslizable enviado correctamente.');
-    } catch (err) {
-      console.warn('[pinterest] El carrusel deslizable no se pudo enviar:', err.message);
-    }
-
-    if (carruselEnviado) return;
-
-    // 2) Respaldo: texto con la lista + miniaturas sueltas + lista interactiva.
-    const listado = resultados.map((p, i) => `*${i + 1}.* ${acortar(p.title)}\n⬇️ ${prefix}pindl ${i + 1}`).join('\n\n');
-    await sock.sendMessage(jid, { text: `📌 Resultados para: *${input}*\n\n${listado}` });
-
-    for (let i = 0; i < resultados.length; i++) {
-      const p = resultados[i];
-      try {
-        if (p.image) await sock.sendMessage(jid, { image: { url: p.image }, caption: `${i + 1}` });
-      } catch (err) {
-        console.error(`[pinterest] error enviando miniatura ${i + 1}:`, err.message);
-      }
-    }
-
-    try {
-      await sock.sendMessage(jid, {
-        text: 'Tambien puedes elegir aqui abajo 👇',
-        footer: 'ALEPANDA BOT',
-        title: 'Descargar un resultado',
-        buttonText: 'Ver opciones',
-        sections: [{
-          title: '📌 Descargar pin',
-          rows: resultados.map((p, i) => ({ title: `${i + 1}. ${acortar(p.title)}`, rowId: `${prefix}pindl ${i + 1}` }))
-        }]
+        titulo: 'Pinterest',
+        subtitulo: input,
+        tarjetas: resultados.map((p, i) => ({
+          imagen: p.image,
+          titulo: acortar(p.title, 60),
+          texto: `Resultado ${i + 1} de ${resultados.length}`,
+          botones: [{ texto: '📌 Descargar', id: `${prefix}pindl ${i + 1}` }]
+        }))
       });
+      console.log('[pinterest] Carrusel enviado.');
+      return;
     } catch (err) {
-      console.warn('[pinterest] la lista interactiva no se pudo enviar:', err.message);
+      console.warn('[pinterest] El carrusel fallo, mando la lista. Detalle:', err.message);
+    }
+
+    // 2) Respaldo: lista en texto + menu desplegable nativo
+    const listado = resultados.map((p, i) => `*${i + 1}.* ${acortar(p.title)}\n⬇️ ${prefix}pindl ${i + 1}`).join('\n\n');
+    await sock.sendMessage(jid, { text: `📌 Resultados para: *${input}*\n\n${listado}` }, { quoted: msg });
+
+    try {
+      await sock.sendMessage(jid, {
+        text: 'Elige un pin para descargar 👇',
+        footer: 'ALEPANDA BOT',
+        title: 'Pinterest',
+        buttons: [{
+          text: '📌 Descargar pin',
+          sections: [{
+            title: 'Resultados',
+            rows: resultados.map((p, i) => ({ title: `${i + 1}. ${acortar(p.title, 40)}`, description: 'Pinterest', id: `${prefix}pindl ${i + 1}` }))
+          }]
+        }]
+      }, { quoted: msg });
+    } catch (err) {
+      console.warn('[pinterest] los botones no se pudieron enviar:', err.message);
     }
   }
 };
