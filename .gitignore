@@ -58,3 +58,4 @@ commands/_eliminados/mantenimiento/
 
 # Arcade: tarjetas, codigos cobrados y rankings (datos, no subir)
 arcade-estado.json*
+cloudflared.deb
