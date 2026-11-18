@@ -60,3 +60,8 @@ commands/_eliminados/mantenimiento/
 arcade-estado.json*
 cloudflared.deb
 reacsticker-cache/
+
+# Sesion de WhatsApp (credenciales del bot): NUNCA se sube al repo.
+# Cubre auth_info/, auth_info.respaldo/, auth_info_baileys/, etc.
+auth_info*/
+*.respaldo/
