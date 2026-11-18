@@ -440,6 +440,8 @@ async function startBot() {
       msg.message.extendedTextMessage?.text ||
       msg.message.imageMessage?.caption ||
       msg.message.videoMessage?.caption ||
+      msg.message.documentMessage?.caption ||
+      msg.message.documentWithCaptionMessage?.message?.documentMessage?.caption ||
       msg.message.groupInviteMessage?.caption ||
       ''
     ).trim();

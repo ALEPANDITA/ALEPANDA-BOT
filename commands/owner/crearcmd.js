@@ -4,6 +4,7 @@ const { advertencia } = require('../../lib/estilo');
 const { obtenerEstado, borrarEstado } = require('../../lib/crearcmd-estado');
 const plan = require('../../lib/crearcmd-plan');
 const arcadeCrear = require('../../lib/arcade-crear');
+const crearcmdJs = require('../../lib/crearcmd-js');
 
 // Si el ultimo comando se instalo bien hace mucho, un texto nuevo ya no se toma como "arreglo" de ese comando
 const MINUTOS_PARA_ARREGLAR_ULTIMO = 30;
@@ -12,7 +13,7 @@ module.exports = {
   name: 'crearcmd',
   aliases: ['iacmd', 'generarcmd'],
   category: 'owner',
-  description: 'Te ayuda a crear un comando nuevo con IA: primero te explica el plan, tu lo ajustas y cuando digas "si" lo crea y lo activa. Solo owner.',
+  description: 'Te ayuda a crear un comando nuevo con IA (o a adaptar un .js de otro bot): primero te explica el plan, tu lo ajustas y cuando digas "si" lo crea y lo activa. Solo owner.',
   execute: async (sock, jid, msg, { prefix, texto, comandos }) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -21,6 +22,22 @@ module.exports = {
     }
 
     const argumentos = texto.trim().split(/\s+/).slice(1).join(' ').trim();
+
+    // Un archivo .js (comando de otro bot, adjunto o citado): se explica el plan de adaptacion y con un "si" se instala
+    const archivoJs = await crearcmdJs.extraerJs(msg, argumentos);
+    if (archivoJs && archivoJs.error) return sock.sendMessage(jid, { text: advertencia(archivoJs.error, { titulo: 'ARCHIVO NO VALIDO', estilo: 'neon' }) }, { quoted: msg });
+    if (archivoJs) {
+      if (archivoJs.analisis.tipo === 'navegador') {
+        return sock.sendMessage(jid, { text: advertencia(`Ese .js parece codigo de navegador (usa document/canvas), no un comando de bot. Si es un juego web, mandalo dentro de un .html con ${prefix}crearcmd y lo instalo en el arcade como el Flappy.`, { titulo: 'NO ES UN COMANDO', estilo: 'neon' }) }, { quoted: msg });
+      }
+      const pendiente = plan.obtenerPlan(jid);
+      if (pendiente && pendiente.ocupado) {
+        return sock.sendMessage(jid, { text: '⏳ Todavia estoy terminando el comando anterior, dame un momento.' }, { quoted: msg });
+      }
+      plan.descartarPlan(jid);
+      arcadeCrear.descartarSesion(jid);
+      return plan.iniciarPlanArchivo({ sock, jid, msg, comandos, prefix, archivo: archivoJs.archivo, instrucciones: archivoJs.instrucciones, analisis: archivoJs.analisis });
+    }
 
     // Un juego HTML (adjunto, citado o pegado): se analiza y se instala como los del arcade (ver lib/arcade-crear.js)
     const html = await arcadeCrear.extraerHtml(msg, argumentos, texto);
@@ -57,6 +74,8 @@ module.exports = {
         'Si alguno de los nombres ya existe, lo PRUEBO antes de tocarlo: si funciona lo dejo igual; si falla lo arreglo con la API que me pases (siempre con respaldo y tu visto bueno).',
         '',
         `${prefix}crearcmd nuevo <descripcion> — empezar de cero (ignora lo anterior)`,
+        '',
+        '📄 *¿Tienes un comando en .js de otro bot?* Mandalo como archivo (o respondele a uno) con ' + prefix + 'crearcmd y dime que es: lo adapto a este bot, te explico el plan y lo instalo con tu "si". Puedes pedir un modelo: _' + prefix + 'crearcmd es un juego igual que el ' + prefix + 'flappy, usalo de referencia_ (tambien sirve sin archivo).',
         '',
         '🎮 *¿Tienes un juego en HTML?* Mándalo como archivo (o respóndele a uno) con ' + prefix + 'crearcmd: lo reviso, te explico el plan y lo instalo en el arcade como el Flappy (se cobra con ' + prefix + 'reclamar).'
       ];
