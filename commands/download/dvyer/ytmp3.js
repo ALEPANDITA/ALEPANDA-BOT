@@ -1,6 +1,8 @@
 const { resolverEntrada, obtenerDatosDescarga, descargarBuffer, limpiarTexto } = require('../../../lib/dvyerapi');
 const { obtenerBusqueda } = require('../../../lib/busquedas');
 const { cargando, advertencia, error: cajaError } = require('../../../lib/estilo');
+const ytd = require('../../../lib/ytdirecto');
+const waCache = require('../../../lib/wa-media-cache');
 
 module.exports = {
   name: 'ytmp3',
@@ -35,6 +37,11 @@ module.exports = {
         return sock.sendMessage(jid, { text: cajaError('No se pudo identificar un video.') });
       }
 
+      // Cancion ya enviada antes: se reenvia con el recibo de WhatsApp, al instante
+      // (sin aviso de "descargando", porque no hay nada que esperar).
+      const idVideo = ytd.idDeUrl(resuelto.url);
+      if (waCache.leer(idVideo) && await waCache.reenviar(sock, jid, idVideo)) return;
+
       const vieneDeBoton = !!msg.message?.templateButtonReplyMessage;
       if (!vieneDeBoton) {
         await sock.sendMessage(jid, {
@@ -46,7 +53,7 @@ module.exports = {
       const buffer = await descargarBuffer(datos.remoteUrl);
       const titulo = datos.title || resuelto.title || 'YouTube M4A';
 
-      await sock.sendMessage(jid, {
+      const enviado = await sock.sendMessage(jid, {
         audio: buffer,
         // El archivo que entrega la API de descarga es MP3 real (confirmado con
         // ffprobe: 'Input #0, mp3'), aunque antes se etiquetaba como audio/mp4/.m4a.
@@ -57,6 +64,7 @@ module.exports = {
         mimetype: 'audio/mpeg',
         fileName: `${titulo}.mp3`
       });
+      waCache.guardar(idVideo, enviado); // para reenviarla al instante la proxima vez
     } catch (err) {
       console.error(err);
       const textoError = err.code === 'NO_API_KEY'

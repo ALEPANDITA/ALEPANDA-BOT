@@ -1,5 +1,7 @@
 const fs = require('fs');
 const { obtenerDatosDescarga, descargarArchivo, buscarYoutube, limpiarTexto } = require('../../../lib/dvyerapi');
+const ytd = require('../../../lib/ytdirecto');
+const waCache = require('../../../lib/wa-media-cache');
 
 function formatearDuracion(segundos = 0) {
   const sec = Number(segundos) || 0;
@@ -56,15 +58,31 @@ module.exports = {
       `👁️ Vistas: ${formatearVistas(video.views)}\n\n` +
       `⬇️ Descargando ${quiereVideo ? 'video' : 'audio'}...`;
 
-    await sock.sendMessage(jid, {
+    // La ficha se manda mientras ya se va preparando la descarga (antes se esperaba
+    // a que la ficha terminara para empezar). El audio igual sale DESPUES de la ficha.
+    const fichaP = sock.sendMessage(jid, {
       image: { url: video.thumbnail },
       caption: ficha
     }).catch(() => sock.sendMessage(jid, { text: ficha }));
+    fichaP.catch(() => {}); // evita "unhandled rejection" si falla mientras se descarga
+    const esperarFicha = () => fichaP.catch((e) => console.error('[play] no se pudo mandar la ficha:', e.message));
+
+    const idVideo = ytd.idDeUrl(video.url);
 
     let tempPath;
     try {
       const endpoint = quiereVideo ? 'ytmp4' : 'ytmp3';
-      const datos = await obtenerDatosDescarga(endpoint, video.url);
+
+      // Cancion ya enviada antes: se reenvia con el recibo de WhatsApp (sin leer ni subir el mp3)
+      if (!quiereVideo && waCache.leer(idVideo)) {
+        await esperarFicha();
+        if (await waCache.reenviar(sock, jid, idVideo)) return;
+      }
+
+      const datosP = obtenerDatosDescarga(endpoint, video.url);
+      datosP.catch(() => {});
+      await esperarFicha();
+      const datos = await datosP;
       tempPath = await descargarArchivo(datos.remoteUrl, quiereVideo ? 'mp4' : 'mp3');
 
       const titulo = datos.title || video.title;
@@ -77,7 +95,7 @@ module.exports = {
         // .ytmp3 -- confirmado que asi se reproduce bien tanto en Android
         // como en iPhone. Un intento anterior de convertir a OGG/Opus para
         // "mejorar" la compatibilidad resulto ser lo que danaba el audio.
-        await sock.sendMessage(jid, {
+        const enviado = await sock.sendMessage(jid, {
           audio: buffer,
           // Ver nota igual en ytmp3.js: el archivo real es MP3, se etiquetaba mal
           // como audio/mp4/.m4a. Android ignoraba la etiqueta y reproducia bien;
@@ -85,6 +103,7 @@ module.exports = {
           mimetype: 'audio/mpeg',
           fileName: `${titulo}.mp3`
         });
+        waCache.guardar(idVideo, enviado); // para reenviarla al instante la proxima vez
       }
     } catch (err) {
       console.error(err);
