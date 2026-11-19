@@ -17,6 +17,7 @@ try { ({ crearSticker } = require('../../lib/stickerlib')); } catch (_) {}
 const TITULO = 'STICKER PACK';
 const MAX_STICKERS = 30;              // WhatsApp acepta hasta 60 por pack
 const MAX_BYTES_STICKER = 1024 * 1024;
+const MAX_BYTES_ANIMADO = 500 * 1024;   // WhatsApp no abre packs con stickers animados de mas de 500 KB
 const MAX_BYTES_DESCARGA = 4 * 1024 * 1024;
 const SUELTOS_RESPALDO = 10;          // si el pack nativo falla, cuantos stickers mandar sueltos
 const UA = 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36';
@@ -194,7 +195,7 @@ const FILTRO_512 = 'scale=512:512:force_original_aspect_ratio=decrease,format=rg
 async function prepararSticker(s) {
   const buf = await descargar(s.url);
   const animado = s.animado || esWebpAnimado(buf);
-  if (esWebp(buf) && buf.length <= MAX_BYTES_STICKER) return { sticker: buf, isAnimated: animado, emojis: ['🎭'], url: s.url };
+  if (esWebp(buf) && animado && buf.length <= MAX_BYTES_STICKER) return { sticker: buf, isAnimated: animado, emojis: ['🎭'], url: s.url };
   if (!animado) return { sticker: await ffmpegAWebp(buf, FILTRO_512), isAnimated: false, emojis: ['🎭'], url: s.url };
   // Animado que no es webp (gif, etc.) o webp animado muy pesado: lo intenta la libreria de stickers
   if (!crearSticker) throw new Error('lib/stickerlib.js no esta instalado');
@@ -420,12 +421,22 @@ module.exports = {
 
       // Descarga en lotes de 3 para cuidar CPU y memoria
       const listos = [];
+      const vistos = new Set();
+      const descartes = [];
       for (let i = 0; i < crudos.length; i += 3) {
         const lote = await Promise.allSettled(crudos.slice(i, i + 3).map(prepararSticker));
-        for (const r of lote) {
-          if (r.status === 'fulfilled' && r.value.sticker.length > 0 && r.value.sticker.length <= MAX_BYTES_STICKER) listos.push(r.value);
+        for (const [j, r] of lote.entries()) {
+          if (r.status !== 'fulfilled') { descartes.push(`#${i + j + 1} fallo: ${r.reason && r.reason.message}`); continue; }
+          const v = r.value;
+          const tope = v.isAnimated ? MAX_BYTES_ANIMADO : MAX_BYTES_STICKER;
+          if (!v.sticker.length || v.sticker.length > tope) { descartes.push(`#${i + j + 1} peso ${v.sticker.length}${v.isAnimated ? ' animado' : ''}`); continue; }
+          const huella = require('crypto').createHash('sha1').update(v.sticker).digest('hex');
+          if (vistos.has(huella)) { descartes.push(`#${i + j + 1} repetido`); continue; }
+          vistos.add(huella);
+          listos.push(v);
         }
       }
+      console.log(`[stickerpack] "${pack.nombre}": ${crudos.length} pedidos, ${listos.length} listos (${listos.filter((s) => s.isAnimated).length} animados)${descartes.length ? ' | descartados: ' + descartes.join('; ') : ''}`);
       if (!listos.length) throw new Error('No se pudo convertir ningun sticker del pack.');
 
       const cover = await construirPortada(pack, listos);
@@ -451,7 +462,7 @@ module.exports = {
         return responder(caja([...resumen, '', 'Abre cada pack: el que muestre los stickers (no en gris) es el bueno. Dime su numero (V1, V2...).'], { titulo: 'PRUEBA DE VARIANTES' }));
       }
 
-      if (soportaPackNativo()) {
+      if (soportaPackNativo() && listos.length >= 3) {
         try {
           await enviarPackNativo(sock, jid, msg, { nombre, autor, descripcion, stickers: listos, cover });
           await reaccionar('✅');

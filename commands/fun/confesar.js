@@ -1,4 +1,4 @@
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { downloadMediaMessage, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const { caja, exito, advertencia, error: cajaError } = require('../../lib/estilo');
 const { guardarConfesion } = require('../../lib/confesiones');
 
@@ -96,13 +96,28 @@ module.exports = {
         : (jidEtiquetado ? [jidEtiquetado] : []);
 
       if (mensajeConMedia) {
-        const buffer = await downloadMediaMessage(mensajeConMedia.message, 'buffer', {});
-        const campoMedia = mensajeConMedia.tipo === 'video' ? 'video' : 'image';
-        await sock.sendMessage(grupoDestino, {
-          [campoMedia]: buffer,
-          caption: textoConfesion,
-          mentions
-        });
+        // Video: se reenvia directo (sin descargarlo ni volverlo a subir) con el texto de la confesion
+        let reenviado = false;
+        if (mensajeConMedia.tipo === 'video') {
+          try {
+            const raiz = mensajeConMedia.message.message || mensajeConMedia.message;
+            const contenidoVideo = { videoMessage: { ...raiz.videoMessage, caption: textoConfesion, contextInfo: { mentionedJid: mentions } } };
+            const reenvio = generateWAMessageFromContent(grupoDestino, contenidoVideo, { userJid: sock.user && sock.user.id });
+            await sock.relayMessage(grupoDestino, reenvio.message, { messageId: reenvio.key.id });
+            reenviado = true;
+          } catch (errReenvio) {
+            console.error('[confesar] no pude reenviar el video directo, lo descargo y lo mando:', errReenvio.message);
+          }
+        }
+        if (!reenviado) {
+          const buffer = await downloadMediaMessage(mensajeConMedia.message, 'buffer', {});
+          const campoMedia = mensajeConMedia.tipo === 'video' ? 'video' : 'image';
+          await sock.sendMessage(grupoDestino, {
+            [campoMedia]: buffer,
+            caption: textoConfesion,
+            mentions
+          });
+        }
       } else {
         await sock.sendMessage(grupoDestino, {
           text: textoConfesion,
