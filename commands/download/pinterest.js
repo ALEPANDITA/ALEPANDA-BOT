@@ -1,13 +1,14 @@
-const { buscarPinterest, enviarPin } = require('../../lib/pinterestapi');
+const { buscarPinterest, enviarPin, enviarImagenesDeBusqueda } = require('../../lib/pinterestapi');
 const { guardarBusqueda } = require('../../lib/busquedas');
-const { enviarCarrusel } = require('../../lib/carrusel');
 const { cargando, advertencia, error: cajaError } = require('../../lib/estilo');
+
+const CUANTAS = 6; // imagenes que se mandan por busqueda
 
 module.exports = {
   name: 'pinterest',
   aliases: ['pin'],
   category: 'download',
-  description: 'Busca en Pinterest (carrusel deslizable) o descarga un pin directo. Uso: .pinterest <busqueda o link>',
+  description: `Busca en Pinterest y manda ${CUANTAS} imagenes directo al chat, o descarga un pin con su link. Uso: .pinterest <busqueda o link>`,
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const input = texto.trim().split(/\s+/).slice(1).join(' ').trim();
 
@@ -30,9 +31,12 @@ module.exports = {
       return;
     }
 
+    await sock.sendMessage(jid, { text: cargando(`Buscando *${input}* en Pinterest...`, { titulo: 'PINTEREST' }) });
+
+    // Se piden mas resultados de los que se mandan: si alguna imagen no baja, otra la reemplaza
     let resultados = [];
     try {
-      resultados = await buscarPinterest(input, 6);
+      resultados = await buscarPinterest(input, CUANTAS * 2);
     } catch (err) {
       console.error('[pinterest]', err);
       const textoError = err.code === 'NO_API_KEY' ? err.message : `No se pudo buscar en Pinterest: ${err.message}`;
@@ -43,49 +47,18 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'No se encontraron resultados en Pinterest.' });
     }
 
-    guardarBusqueda(jid, resultados);
-
-    const acortar = (t, max = 55) => (t && t.length > max ? t.slice(0, max - 3) + '...' : (t || 'Pin sin titulo'));
-
-    // 1) Carrusel deslizable (una tarjeta por pin)
+    let enviados = [];
     try {
-      await enviarCarrusel(sock, jid, msg, {
-        texto: `📌 Resultados para: *${input}* (desliza para ver mas)`,
-        footer: 'ALEPANDA BOT',
-        titulo: 'Pinterest',
-        subtitulo: input,
-        tarjetas: resultados.map((p, i) => ({
-          imagen: p.image,
-          titulo: acortar(p.title, 60),
-          texto: `Resultado ${i + 1} de ${resultados.length}`,
-          botones: [{ texto: '📌 Descargar', id: `${prefix}pindl ${i + 1}` }]
-        }))
-      });
-      console.log('[pinterest] Carrusel enviado.');
-      return;
+      enviados = await enviarImagenesDeBusqueda(sock, jid, resultados, { cantidad: CUANTAS, quoted: msg });
     } catch (err) {
-      console.warn('[pinterest] El carrusel fallo, mando la lista. Detalle:', err.message);
+      console.error('[pinterest]', err);
     }
 
-    // 2) Respaldo: lista en texto + menu desplegable nativo
-    const listado = resultados.map((p, i) => `*${i + 1}.* ${acortar(p.title)}\n⬇️ ${prefix}pindl ${i + 1}`).join('\n\n');
-    await sock.sendMessage(jid, { text: `📌 Resultados para: *${input}*\n\n${listado}` }, { quoted: msg });
-
-    try {
-      await sock.sendMessage(jid, {
-        text: 'Elige un pin para descargar 👇',
-        footer: 'ALEPANDA BOT',
-        title: 'Pinterest',
-        buttons: [{
-          text: '📌 Descargar pin',
-          sections: [{
-            title: 'Resultados',
-            rows: resultados.map((p, i) => ({ title: `${i + 1}. ${acortar(p.title, 40)}`, description: 'Pinterest', id: `${prefix}pindl ${i + 1}` }))
-          }]
-        }]
-      }, { quoted: msg });
-    } catch (err) {
-      console.warn('[pinterest] los botones no se pudieron enviar:', err.message);
+    if (!enviados.length) {
+      return sock.sendMessage(jid, { text: cajaError('Encontre resultados, pero no pude bajar ninguna imagen. Intenta de nuevo en un momento.') });
     }
+
+    // Para que ".pindl <numero>" siga funcionando con lo que se acaba de mandar (1/6, 2/6...)
+    guardarBusqueda(jid, enviados);
   }
 };
