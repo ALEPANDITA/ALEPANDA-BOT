@@ -16,6 +16,7 @@ module.exports = {
     }
 
     let pinUrl = input;
+    let extra = {};
     if (/^\d+$/.test(input)) {
       const deLaBusqueda = obtenerBusqueda(jid, input);
       if (!deLaBusqueda) {
@@ -24,12 +25,14 @@ module.exports = {
         });
       }
       pinUrl = deLaBusqueda.url;
+      // la busqueda ya trae la imagen en buena calidad: se baja directo (los pines "e1_..." no siempre salen por la API de descarga)
+      extra = { directas: deLaBusqueda.full, titulo: deLaBusqueda.title };
     }
 
     await sock.sendMessage(jid, { text: cargando('Descargando el pin...', { titulo: 'PINDL' }) });
 
     try {
-      await enviarPin(sock, jid, pinUrl, { quoted: msg });
+      await enviarPin(sock, jid, pinUrl, { quoted: msg, ...extra });
     } catch (err) {
       console.error('[pindl]', err);
       const textoError = err.code === 'NO_API_KEY' ? err.message : `No se pudo descargar: ${err.message}`;
