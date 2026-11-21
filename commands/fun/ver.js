@@ -58,8 +58,7 @@ module.exports = {
       const nombre = NOMBRE_TIPO[base.tipo] || 'archivo';
       let texto;
       if (!intentos.length) {
-        texto = `No pude abrir esa ${nombre}: WhatsApp no manda el archivo cuando alguien responde a un "ver una vez", y este no lo vi llegar. ` +
-          `Solo puedo recuperar los que me llegan mientras estoy encendido (hasta 3 horas después). Prueba con uno que acaben de mandar.`;
+        texto = `No puedo abrir esa ${nombre}: WhatsApp no le entrega a los bots el contenido de los mensajes de "ver una vez", solo les avisa que existieron. No es un error del bot y no hay forma de arreglarlo.`;
       } else {
         texto = `No se pudo recuperar esa ${nombre}: ya no está disponible en WhatsApp (puede que ya se haya abierto o que haya expirado).`;
       }

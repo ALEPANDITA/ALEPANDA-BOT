@@ -551,6 +551,7 @@ async function startBot() {
         const respuestaTexto = texto.trim().toLowerCase();
         if (respuestaTexto === 'si' || respuestaTexto === 'sí') {
           propuestasPorMensaje.delete(stanzaIdRespuesta);
+          if (propuesta.tipo === 'adopcion') { await require('./lib/familia').aceptarAdopcion(sock, propuesta); return; }
           const { guardarDB } = require('./lib/db');
           const dbCasar = leerDB();
           const perfilDe = getUsuario(dbCasar, propuesta.de);
@@ -562,10 +563,7 @@ async function startBot() {
             perfilPara.pareja = propuesta.de;
             require('./lib/matrimonio').registrarBoda(perfilDe, propuesta.de, perfilPara, propuesta.para);
             guardarDB(dbCasar);
-            await sock.sendMessage(propuesta.jid, {
-              text: `💒 @${propuesta.de.split('@')[0]} y @${propuesta.para.split('@')[0]} ahora estan casados! Felicidades 🎉`,
-              mentions: [propuesta.de, propuesta.para]
-            });
+            await require('./lib/familia').celebrarBoda(sock, propuesta);
           }
           return;
         }

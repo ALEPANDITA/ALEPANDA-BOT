@@ -3,8 +3,9 @@ const { propuestasPorMensaje, tienePropuestaActiva, TIEMPO_EXPIRA } = require('.
 
 module.exports = {
   name: 'casar',
+  aliases: ['casarse'],
   category: 'perfil',
-  description: 'Propone matrimonio a alguien (mencionalo o responde a su mensaje). Debe contestar "si" para aceptar.',
+  description: 'Propone matrimonio a alguien (mencionalo o responde a su mensaje). Si acepta con "si", el bot hace la boda.',
   execute: async (sock, jid, msg, { prefix }) => {
     const remitente = msg.key.participant || msg.key.remoteJid;
 

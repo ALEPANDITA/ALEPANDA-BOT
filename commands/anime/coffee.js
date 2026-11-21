@@ -1,5 +1,5 @@
-const { fetchEvogb } = require('../../lib/evogb');
-const { error: cajaError } = require('../../lib/estilo');
+const { enviarReaccion } = require('../../lib/animereact');
+const { cajaError } = require('../../lib/estilo');
 
 module.exports = {
   name: 'coffee',
@@ -8,41 +8,35 @@ module.exports = {
   description: 'Comparte un café con alguien o tómate uno tú solo. Uso: .coffee [@usuario]',
   execute: async (sock, jid, msg, { prefix }) => {
     try {
-      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-      const sender = msg.key.participant || msg.key.remoteJid;
-
-      let mensajeTexto = '';
-      if (mentionedJid.length > 0) {
-        mensajeTexto = `@${sender.split('@')[0]} le da un café a @${mentionedJid[0].split('@')[0]}`;
-      } else {
-        mensajeTexto = `@${sender.split('@')[0]} está tomando un rico café.`;
-      }
-
-      const res = await fetchEvogb('https://api.evogb.org/sfw/interaction?type=coffee');
-      if (!res.ok) throw new Error('Error al conectar con la API');
-
-      const data = await res.json();
-      if (!data.status || !data.result) {
-        throw new Error('No se pudo obtener el archivo multimedia');
-      }
-
-      const mediaUrl = data.result;
-      const isVideo = mediaUrl.endsWith('.mp4') || mediaUrl.includes('.mp4');
-
-      if (isVideo) {
-        await sock.sendMessage(jid, {
-          video: { url: mediaUrl },
-          caption: mensajeTexto,
-          gifPlayback: true,
-          mentions: [...mentionedJid, sender]
-        });
-      } else {
-        await sock.sendMessage(jid, {
-          image: { url: mediaUrl },
-          caption: mensajeTexto,
-          mentions: [...mentionedJid, sender]
-        });
-      }
+      await enviarReaccion(sock, jid, msg, {
+        tipo: 'coffee',
+        emoji: '☕',
+        conObjetivo: (yo, el) => `@${yo} le ofrece un café a @${el}`,
+        sinObjetivo: (yo) => `@${yo} está disfrutando de un buen café`,
+        obtener: async () => {
+          // Intentamos primero con evogb, si falla usamos nekos.best como respaldo
+          try {
+            const res = await fetch('https://api.evogb.org/sfw/interaction?type=coffee');
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.status && data?.result) {
+                return { url: data.result };
+              }
+            }
+          } catch (_) {
+            // Ignorar error y pasar al fallback
+          }
+          // Fallback a nekos.best (endpoint aleatorio de tipo coffee)
+          const fallbackRes = await fetch('https://nekos.best/api/v2/coffee');
+          if (!fallbackRes.ok) throw new Error('Fallback API failed');
+          const fallbackData = await fallbackRes.json();
+          // nekos.best devuelve { results: [{ url: '...' }] }
+          if (fallbackData?.results?.[0]?.url) {
+            return { url: fallbackData.results[0].url };
+          }
+          throw new Error('No se obtuvo URL de imagen/gif');
+        }
+      });
     } catch (err) {
       console.error(err);
       await sock.sendMessage(jid, { text: cajaError('Ocurrió un error al procesar el comando coffee.') });

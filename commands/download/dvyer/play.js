@@ -2,6 +2,7 @@ const fs = require('fs');
 const { obtenerDatosDescarga, descargarArchivo, buscarYoutube, limpiarTexto } = require('../../../lib/dvyerapi');
 const ytd = require('../../../lib/ytdirecto');
 const waCache = require('../../../lib/wa-media-cache');
+const { crearGifPlay } = require('../../../lib/playgif');
 
 function formatearDuracion(segundos = 0) {
   const sec = Number(segundos) || 0;
@@ -60,10 +61,18 @@ module.exports = {
 
     // La ficha se manda mientras ya se va preparando la descarga (antes se esperaba
     // a que la ficha terminara para empezar). El audio igual sale DESPUES de la ficha.
-    const fichaP = sock.sendMessage(jid, {
-      image: { url: video.thumbnail },
-      caption: ficha
-    }).catch(() => sock.sendMessage(jid, { text: ficha }));
+    // La ficha sale como GIF animado (marco de reproductor con la portada adentro, lib/playgif.js).
+    // Si falta el marco (assets/play) o algo falla, sale la imagen de siempre, y si eso falla, solo el texto.
+    const fichaP = (async () => {
+      const gif = video.thumbnail
+        ? await crearGifPlay({ portada: video.thumbnail, clave: ytd.idDeUrl(video.url) || video.url }).catch(() => null)
+        : null;
+      if (gif) {
+        try { return await sock.sendMessage(jid, { video: gif, gifPlayback: true, mimetype: 'video/mp4', caption: ficha }); }
+        catch (err) { console.error('[play] no se pudo mandar el GIF:', err.message); }
+      }
+      return sock.sendMessage(jid, { image: { url: video.thumbnail }, caption: ficha });
+    })().catch(() => sock.sendMessage(jid, { text: ficha }));
     fichaP.catch(() => {}); // evita "unhandled rejection" si falla mientras se descarga
     const esperarFicha = () => fichaP.catch((e) => console.error('[play] no se pudo mandar la ficha:', e.message));
 

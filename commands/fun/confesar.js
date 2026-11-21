@@ -74,8 +74,22 @@ module.exports = {
 
       let jidEtiquetado = null;
       if (numeroEtiquetado) {
-        const participante = metadata.participants.find(p => p.id.split('@')[0] === numeroEtiquetado);
-        if (participante) jidEtiquetado = participante.id;
+        const digitos = (x) => String(x || '').split('@')[0].split(':')[0];
+        const buscar = (num) => metadata.participants.find((p) => [p.id, p.lid, p.jid, p.phoneNumber].some((x) => digitos(x) === num));
+        let participante = buscar(numeroEtiquetado);
+        if (!participante) {
+          // Si el grupo muestra a la gente como @lid, traducimos el numero a su @lid y buscamos de nuevo
+          try {
+            const pnJid = numeroEtiquetado + '@s.whatsapp.net';
+            let lid = null;
+            try { lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid); } catch (_) { /* este fork no lo soporta */ }
+            if (!lid) lid = await require('../../lib/permisos').resolverLid(sock, pnJid);
+            if (lid && digitos(lid) !== numeroEtiquetado) participante = buscar(digitos(lid));
+          } catch (_) { /* seguimos sin etiqueta */ }
+        }
+        // Se etiqueta con el numero real (igual que las despedidas del bot), asi sale como @usuario azul
+        if (participante) jidEtiquetado = numeroEtiquetado + '@s.whatsapp.net';
+        else console.log('[confesar] no encontre a ' + numeroEtiquetado + ' en el grupo. Ejemplo de participante:', JSON.stringify(metadata.participants[0]));
       }
 
       const lineas = confesion ? [`"${confesion}"`] : [];

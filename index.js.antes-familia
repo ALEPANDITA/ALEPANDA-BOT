@@ -1,0 +1,856 @@
+require('net').setDefaultAutoSelectFamily(false);
+require('dns').setDefaultResultOrder('ipv4first');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestWaWebVersion, Browsers } = require('@whiskeysockets/baileys');
+const chalk = require('chalk');
+const qrcode = require('qrcode-terminal');
+const { Boom } = require('@hapi/boom');
+const readline = require('readline');
+const pino = require('pino');
+
+const { leerConfig } = require('./lib/config');
+const { esOwnerBot } = require('./lib/permisos');
+const { leerDB, getGrupo, getUsuario } = require('./lib/db');
+const { construirTexto, mencionesExtra, construirPayloadEnvio, obtenerMediaGuardada, obtenerFotoPerfilSegura, conTimeout } = require('./lib/bienvenidapro');
+
+const fs = require('fs');
+const path = require('path');
+
+const CACHE_METADATA_TTL_MS = 5 * 60 * 1000;
+const cacheMetadataGrupos = new Map();
+
+// Guarda la referencia al interval de subastas para poder limpiar cualquier
+// instancia anterior antes de crear una nueva. Sin esto, cada reconexion del
+// bot (Bad MAC, caida de red, restart, etc.) crea OTRO interval mas corriendo
+// cada 30s para siempre, y cada uno hace una lectura completa de la base de
+// datos -- es la causa principal de que la RAM suba solo con el tiempo,
+// incluso sin que nadie use el bot.
+let intervaloSubastas = null;
+
+async function obtenerMetadataCacheada(sock, jid, forzar = false) {
+  const cacheado = cacheMetadataGrupos.get(jid);
+  if (!forzar && cacheado && (Date.now() - cacheado.ts) < CACHE_METADATA_TTL_MS) {
+    return cacheado.data;
+  }
+  const data = await sock.groupMetadata(jid);
+  cacheMetadataGrupos.set(jid, { data, ts: Date.now() });
+  return data;
+}
+
+// Quita del cache las entradas ya vencidas (grupos que no se han vuelto a
+// consultar en un rato). Sin esto, el Map guarda una entrada por cada grupo
+// distinto donde el bot estuvo activo alguna vez, y nunca se reduce.
+function podarCacheMetadataGrupos() {
+  const ahora = Date.now();
+  let podados = 0;
+  for (const [jid, entrada] of cacheMetadataGrupos.entries()) {
+    if ((ahora - entrada.ts) >= CACHE_METADATA_TTL_MS) {
+      cacheMetadataGrupos.delete(jid);
+      podados++;
+    }
+  }
+  return podados;
+}
+
+const EMOJIS_POR_CATEGORIA = {
+  download: '🔍', fun: '🎉', admin: '🛠️', economia: '💰', casino: '🎰',
+  owner: '👑', ia: '🤖', general: 'ℹ️', perfil: '🪪', default: '⚡', nsfw: '💗', arcade: '🕹️'
+};
+
+function normalizarComando(texto) {
+  return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function listarJsRecursivo(dir) {
+  let resultado = [];
+  for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rutaCompleta = path.join(dir, entrada.name);
+    if (entrada.isDirectory()) {
+      resultado = resultado.concat(listarJsRecursivo(rutaCompleta));
+    } else if (entrada.name.endsWith('.js')) {
+      resultado.push(rutaCompleta);
+    }
+  }
+  return resultado;
+}
+
+function cargarComandos() {
+  const comandos = new Map();
+  const basePath = path.join(__dirname, 'commands');
+  const categorias = fs.readdirSync(basePath);
+  for (const categoria of categorias) {
+    // Carpetas que empiezan con _ (_eliminados, _staging) no son comandos activos
+    if (categoria.startsWith('_')) continue;
+    const catPath = path.join(basePath, categoria);
+    if (!fs.statSync(catPath).isDirectory()) continue;
+    const archivos = listarJsRecursivo(catPath);
+    for (const rutaArchivo of archivos) {
+      try {
+        const exportado = require(rutaArchivo);
+        const lista = Array.isArray(exportado) ? exportado : [exportado];
+        for (const comando of lista) {
+          if (!comando._rutaArchivo) comando._rutaArchivo = rutaArchivo;
+          comandos.set(comando.name, comando);
+          if (Array.isArray(comando.aliases)) {
+            for (const alias of comando.aliases) comandos.set(alias, comando);
+          }
+          // Alias que funcionan pero no se listan en el menu (ej. .menu1, .menu2, ...)
+          if (Array.isArray(comando.aliasesOcultas)) {
+            for (const alias of comando.aliasesOcultas) comandos.set(alias, comando);
+          }
+        }
+      } catch (err) {
+        // Un comando roto no debe tumbar todo el bot
+        console.error(`[comandos] No se pudo cargar ${path.relative(__dirname, rutaArchivo)}:`, err.message);
+      }
+    }
+  }
+  return comandos;
+}
+
+function logMensaje({ remitente, texto, esGrupo }) {
+  const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const tipo = esGrupo ? chalk.bgMagenta.black.bold(' GRUPO ') : chalk.bgCyan.black.bold(' PRIVADO ');
+  const textoCorto = texto.length > 100 ? texto.slice(0, 100) + '…' : texto;
+  console.log(chalk.gray('┌─────────────────────────────────────────'));
+  console.log(chalk.gray('│ ') + chalk.yellowBright.bold('💬 Mensaje nuevo') + '  ' + tipo);
+  console.log(chalk.gray('│ ') + chalk.greenBright('👤 Remitente: ') + chalk.whiteBright(remitente));
+  console.log(chalk.gray('│ ') + chalk.blueBright('🕐 Hora: ') + chalk.whiteBright(hora));
+  console.log(chalk.gray('│ ') + chalk.magentaBright('✉️  Mensaje: ') + chalk.white(textoCorto));
+  console.log(chalk.gray('└─────────────────────────────────────────'));
+}
+
+console.log('📦 Cargando comandos...');
+const comandos = cargarComandos();
+console.log(`✅ ${comandos.size} comandos/alias cargados sin errores.`);
+
+// NSFW: la primera vez que arranca con este cambio se apaga en todos los grupos (solo vuelve donde un owner use .tnsfw on)
+try {
+  const gruposApagados = require('./lib/nsfw').apagarNsfwUnaVez();
+  if (gruposApagados) console.log(`🔞 NSFW apagado en ${gruposApagados} grupo(s) que lo tenían activo. Un owner lo vuelve a activar con .tnsfw on`);
+} catch (err) { console.error('[nsfw] No pude apagar el NSFW de los grupos:', err && err.message ? err.message : err); }
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const pregunta = (texto) => new Promise((resolve) => rl.question(texto, resolve));
+
+process.on('uncaughtException', (err) => { console.error('Error no capturado:', err); });
+process.on('unhandledRejection', (err) => { console.error('Promesa rechazada sin manejar (COMPLETO):', err); });
+
+let reiniciando = false;
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+  console.log('📂 Sesión auth_info cargada.');
+  const { version } = await fetchLatestWaWebVersion();
+  console.log('🌐 Version de WhatsApp Web obtenida:', version);
+
+  let metodo = null;
+  let yaRegistrado = false;
+  try {
+    const credsPath = path.join(__dirname, 'auth_info', 'creds.json');
+    if (fs.existsSync(credsPath)) {
+      const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+      yaRegistrado = credsData.registered === true;
+    }
+  } catch (e) {
+    yaRegistrado = false;
+  }
+
+  if (!yaRegistrado) {
+    if (process.stdout.isTTY) {
+      console.log('Seleccione una opcion:');
+      console.log('1. Con codigo QR');
+      console.log('2. Con codigo de texto de 8 digitos');
+      metodo = await pregunta('> ');
+    } else {
+      metodo = '1';
+      console.log('Modo automatico: usando QR');
+    }
+  }
+
+  console.log('🔌 Intentando abrir conexion con WhatsApp...');
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    browser: metodo?.trim() === '2' ? Browsers.macOS('Safari') : Browsers.ubuntu('Chrome'),
+    logger: pino({ level: 'error' }),
+  });
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
+    if (update.qr) console.log('✅ Llego un QR nuevo.');
+    console.log('📶 Estado de conexion:', connection || '(sin cambio)');
+    if (lastDisconnect?.error) console.log('⚠️  Motivo de desconexion:', lastDisconnect.error.message);
+
+    if (connection === 'close') {
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      console.log('❌ Se cerró la conexión. Razón:', reason, lastDisconnect?.error?.message);
+      if (reason === DisconnectReason.loggedOut) {
+        console.log('Sesion cerrada, borra la carpeta auth_info y vuelve a intentar.');
+        return;
+      }
+      if (reason === DisconnectReason.restartRequired) {
+        console.log('WhatsApp pidio reiniciar la conexion (normal durante pairing). Reiniciando...');
+        if (!reiniciando) { reiniciando = true; setTimeout(() => { reiniciando = false; startBot(); }, 1500); }
+        return;
+      }
+      if (sock.authState.creds.registered) {
+        if (reiniciando) return;
+        reiniciando = true;
+        setTimeout(() => { reiniciando = false; startBot(); }, 2000);
+      } else {
+        console.log('Conexion cerrada durante pairing/QR.');
+      }
+      return;
+    }
+
+    if (connection === 'open') {
+      const { iniciarVigilanteConexion } = require('./lib/vigilanteConexion');
+      iniciarVigilanteConexion(sock);
+      console.log(chalk.green.bold('✅ Bot conectado correctamente (ETAPA 5 - COMPLETA)'));
+
+      if (intervaloSubastas) clearInterval(intervaloSubastas);
+      intervaloSubastas = setInterval(async () => {
+        try {
+          const { leerDB } = require('./lib/db');
+          const { finalizarSubastasVencidas } = require('./lib/mercado');
+          const { finalizarSubastasVencidasAnime } = require('./lib/mercadoanime');
+          const db = leerDB();
+          await finalizarSubastasVencidas(sock, db);
+          await finalizarSubastasVencidasAnime(sock, db);
+        } catch (err) {
+          console.error('[subastas] Error revisando subastas vencidas:', err);
+        }
+      }, 30 * 1000);
+
+      // .time: avisa por privado cuando se acaba el tiempo del bot en un grupo
+      try { require('./lib/tiempo-grupos').iniciarVigilanteTiempos(sock); } catch (err) { console.error('[time] No pude iniciar el vigilante:', err.message); }
+
+      // .cerrar <tiempo>: abre solo los grupos cuyo cierre ya vencio
+      try { require('./lib/cierre-grupos').iniciarVigilanteCierres(sock); } catch (err) { console.error('[cerrar] No pude iniciar el vigilante:', err.message); }
+
+      const { iniciarMonitorMemoria } = require('./lib/memoria');
+      iniciarMonitorMemoria([podarCacheMetadataGrupos]);
+    }
+  });
+
+  if (!sock.authState.creds.registered) {
+    if (metodo?.trim() === '1') {
+      sock.ev.on('connection.update', (update) => {
+        if (update.qr) {
+          qrcode.generate(update.qr, { small: true });
+          console.log('Escanea este codigo QR desde WhatsApp > Dispositivos vinculados');
+        }
+      });
+    } else {
+      const numero = await pregunta('Escribe tu numero con codigo de pais (ej: 5217712345678): ');
+      let codigo = null;
+      let socketCerrado = false;
+      const onClose = (u) => { if (u.connection === 'close') socketCerrado = true; };
+      sock.ev.on('connection.update', onClose);
+      for (let intento = 1; intento <= 5 && !codigo; intento++) {
+        if (socketCerrado) break;
+        try {
+          await new Promise(r => setTimeout(r, 5000 + 3000 * intento));
+          if (socketCerrado) break;
+          codigo = await sock.requestPairingCode(numero.trim());
+        } catch (err) {
+          console.log(`Intento ${intento} fallo:`, err.message);
+        }
+      }
+      sock.ev.off('connection.update', onClose);
+      if (!codigo) { console.log('No se pudo obtener el codigo de vinculacion.'); process.exit(1); }
+      console.log(`🔑 Tu codigo de vinculacion es: ${codigo}`);
+    }
+  }
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('groups.update', async (actualizaciones) => {
+    for (const act of actualizaciones) {
+      if (act.id) cacheMetadataGrupos.delete(act.id);
+    }
+    // Alertas de grupo (.alertas on): quien cambio nombre/ajustes/icono/link
+    for (const act of actualizaciones) {
+      try {
+        if (act.id && require('./lib/apagados').estaApagado(act.id)) continue;
+        await require('./lib/alertas').alertaCambioGrupo(sock, act);
+      } catch (e) { console.error('[alertas]', e); }
+    }
+  });
+
+  sock.ev.on('group-participants.update', async (update) => {
+    const { id: jid, participants, action } = update;
+    // Grupo apagado con .apagar: ni bienvenidas ni nada
+    try { if (require('./lib/apagados').estaApagado(jid)) return; } catch (e) { console.error('[apagados]', e); }
+    const config = leerConfig();
+    const db = leerDB();
+    const grupo = getGrupo(db, jid);
+
+    let metadata;
+    try {
+      metadata = await obtenerMetadataCacheada(sock, jid);
+    } catch (err) {
+      return;
+    }
+
+    if (action === 'add') {
+      for (const p of participants) {
+        const pid = typeof p === 'string' ? p : p.id;
+        if (!metadata.participants.some(x => x.id === pid)) {
+          metadata.participants.push({ id: pid });
+        }
+      }
+    } else if (action === 'remove') {
+      const idsQueSalen = participants.map(p => (typeof p === 'string' ? p : p.id));
+      metadata.participants = metadata.participants.filter(x => !idsQueSalen.includes(x.id));
+    }
+
+    // WhatsApp ahora suele dar el ID del participante como "xxxxx@lid" (un
+    // identificador de privacidad) en vez del numero real "xxxxx@s.whatsapp.net".
+    // Antes, si no se lograba traducir el @lid a un numero real, se terminaba
+    // usando el propio @lid como si fuera un numero de telefono -- por eso
+    // salian "numeros random" en las menciones. Ahora: el JID que se usa para
+    // ETIQUETAR (mentions) siempre es el que WhatsApp realmente entrego
+    // (participanteId, sea @lid o @s.whatsapp.net), que es 100% valido porque
+    // es el identificador real de esa persona en el grupo. La traduccion a
+    // numero de telefono SOLO se usa para el texto visible, y si falla, no
+    // rompe nada -- simplemente el texto no muestra el numero.
+    async function resolverParticipante(participanteId, metadata, sock) {
+      if (participanteId.endsWith('@s.whatsapp.net')) {
+        return { numero: participanteId.split('@')[0], jidMencion: participanteId };
+      }
+
+      try {
+        const pn = await conTimeout(
+          sock.signalRepository?.lidMapping?.getPNForLID?.(participanteId),
+          2000,
+          null
+        );
+        if (pn) {
+          const numeroReal = pn.split('@')[0].split(':')[0];
+          return { numero: numeroReal, jidMencion: `${numeroReal}@s.whatsapp.net` };
+        }
+      } catch (err) { /* este fork no soporta el mapeo, seguimos con el respaldo */ }
+
+      const info = metadata.participants.find(p => p.id === participanteId || p.lid === participanteId);
+      if (info?.phoneNumber) {
+        const numeroReal = info.phoneNumber.split('@')[0];
+        return { numero: numeroReal, jidMencion: `${numeroReal}@s.whatsapp.net` };
+      }
+
+      return { numero: `lid-${participanteId.split('@')[0]}`, jidMencion: participanteId };
+    }
+
+    async function procesarParticipante(participante) {
+      const participanteId = typeof participante === 'string' ? participante : participante.id;
+      const { numero, jidMencion } = await resolverParticipante(participanteId, metadata, sock);
+      const jidReal = jidMencion;
+      // Para la tarjeta de imagen, si no se pudo resolver un numero real
+      // (queda como "lid-xxxxx"), mejor no mostrar nada a que se vea un
+      // numero falso/confuso.
+      const numeroParaImagen = String(numero).startsWith('lid-') ? null : numero;
+
+      if (action === 'demote') {
+        try { await require('./lib/alertas').alertaDegradado(sock, jid, jidReal, update.author); } catch (err) { console.error('[alertas]', err); }
+        return;
+      }
+
+      if (action === 'promote') {
+        try {
+          // El texto de la etiqueta tiene que coincidir con el JID de la mencion para que se vea como @usuario
+          await sock.sendMessage(jid, {
+            text: `🎉 @${jidReal.split('@')[0]} felicidades, subiste a admin 👑`,
+            mentions: [jidReal]
+          });
+        } catch (err) { console.error('[promote]', err); }
+        return;
+      }
+
+      if (action === 'add' && grupo.antifake && !numero.startsWith('lid-')) {
+        const codigos = grupo.paisesPermitidos || ['52', '51'];
+        const permitido = codigos.some(c => numero.startsWith(c));
+        if (!permitido) {
+          try {
+            await sock.groupParticipantsUpdate(jid, [participanteId], 'remove');
+            await sock.sendMessage(jid, {
+              text: `🚫 @${numero} fue expulsado por antifake (numero de un pais no permitido).`,
+              mentions: [jidReal]
+            });
+            return;
+          } catch (err) { console.error(err); }
+        }
+      }
+
+      if (action === 'add' && grupo.antiraid) {
+        global.controlRaid = global.controlRaid || {};
+        const registro = global.controlRaid[jid] || [];
+        const ahora = Date.now();
+        const reciente = registro.filter(t => ahora - t < 30000);
+        reciente.push(ahora);
+        global.controlRaid[jid] = reciente;
+        if (reciente.length > 5) {
+          try {
+            await sock.groupSettingUpdate(jid, 'announcement');
+            await sock.sendMessage(jid, { text: '🚨 Posible raid detectado (muchos usuarios entrando de golpe). El grupo fue cerrado automaticamente, solo admins pueden escribir.' });
+          } catch (err) { console.error(err); }
+        }
+      }
+
+      if (action === 'add' && grupo.bienvenida) {
+        const nombreConocido = getUsuario(db, jidReal).nombre;
+        const plantilla = grupo.textoBienvenida || 'Bienvenido/a {user} al grupo {group}!';
+        const texto = construirTexto(plantilla, { numero, metadata, sock, prefix: config.prefix, nombreConocido });
+        const fotoBuffer = grupo.welcomeMediaType === undefined ? await obtenerFotoPerfilSegura(sock, participanteId) : null;
+        const { buffer, tipoMedia } = await obtenerMediaGuardada('welcome', jid, grupo, {
+          fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
+        });
+        const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
+        await sock.sendMessage(jid, { ...payload, mentions: [jidReal, ...mencionesExtra(plantilla, metadata, sock)] });
+        await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'welcome');
+      }
+
+      if (action === 'remove' && grupo.despedida) {
+        const nombreConocido = getUsuario(db, jidReal).nombre;
+        const plantilla = grupo.textoDespedida || '{user} salio del grupo.';
+        const texto = construirTexto(plantilla, { numero, metadata, sock, prefix: config.prefix, nombreConocido });
+        const fotoBuffer = grupo.byeMediaType === undefined ? await obtenerFotoPerfilSegura(sock, participanteId) : null;
+        const { buffer, tipoMedia } = await obtenerMediaGuardada('bye', jid, grupo, {
+          fotoBuffer, nombreGrupo: metadata.subject, totalMiembros: metadata.participants.length, numero: numeroParaImagen, nombreConocido
+        });
+        const payload = construirPayloadEnvio(tipoMedia, buffer, texto);
+        await sock.sendMessage(jid, { ...payload, mentions: [jidReal, ...mencionesExtra(plantilla, metadata, sock)] });
+        await require('./lib/audiosbienvenida').enviarAudios(sock, jid, 'bye');
+      }
+    }
+
+    await Promise.all(participants.map(procesarParticipante));
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    // .ver: recuerda (solo la referencia, no el archivo) los mensajes de "ver una vez" que llegan
+    try { const vu = require('./lib/vistaunica'); for (const m of messages) if (!m.key.fromMe) vu.recordar(m); } catch (e) { /* no estorba al resto del bot */ }
+
+    const config = leerConfig();
+    const jid = msg.key.remoteJid;
+    const texto = (
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      msg.message.imageMessage?.caption ||
+      msg.message.videoMessage?.caption ||
+      msg.message.documentMessage?.caption ||
+      msg.message.documentWithCaptionMessage?.message?.documentMessage?.caption ||
+      msg.message.groupInviteMessage?.caption ||
+      ''
+    ).trim();
+    const esGrupo = jid.endsWith('@g.us');
+
+    // Grupo apagado con .apagar: el bot no responde a nadie ahi. Unica excepcion: un owner con .encender
+    try {
+      if (esGrupo && require('./lib/apagados').estaApagado(jid)) {
+        const dbApagado = leerDB();
+        const prefixApagado = getGrupo(dbApagado, jid).prefix || config.prefix || '.';
+        if (texto.startsWith(prefixApagado)) {
+          const cmdApagado = comandos.get(normalizarComando(texto.slice(prefixApagado.length).trim().split(/\s+/)[0]));
+          if (cmdApagado && cmdApagado.permiteApagado && await esOwnerBot(sock, config, msg)) {
+            await cmdApagado.execute(sock, jid, msg, { prefix: prefixApagado, texto, comandos });
+          }
+        }
+        return;
+      }
+    } catch (e) { console.error('[apagados]', e); return; }
+
+    // Usuarios bloqueados con .bloquear: no pueden usar nada del bot (comandos, botones, juegos, IAs...).
+    // La moderacion del grupo (mute, antiflood, antilink) si se les sigue aplicando.
+    let bloqueado = false;
+    try { bloqueado = !!require('./lib/bloqueos').estaBloqueado(msg); } catch (e) { console.error('[bloqueos]', e); }
+
+    if (!bloqueado && esGrupo && config.grupoPelis && jid === config.grupoPelis && msg.message.videoMessage) {
+      try {
+        const vm = msg.message.videoMessage;
+        if (!vm.mimetype || vm.mimetype.startsWith('video/')) {
+          const { agregarPelicula } = require('./lib/pelis');
+          const { caja: cajaPelis } = require('./lib/estilo');
+          const dbPelis = leerDB();
+          const grupoPelisPrefix = getGrupo(dbPelis, jid);
+          const prefixPelis = grupoPelisPrefix.prefix || config.prefix || '.';
+          const nombreArchivo = vm.fileName || `video_${Date.now()}.mp4`;
+          const numero = agregarPelicula({
+            nombre: nombreArchivo, mimetype: vm.mimetype, tamano: Number(vm.fileLength) || 0,
+            key: msg.key, videoMessage: vm
+          });
+          await sock.sendMessage(jid, {
+            text: cajaPelis([`*${nombreArchivo}*`, `Pidanla con: ${prefixPelis}pelis ${numero}`], { titulo: `🎬 AGREGADA AL CATALOGO #${numero}`, estilo: 'gamer' })
+          }, { quoted: msg });
+        }
+      } catch (e) { console.error('[pelis] error catalogando video:', e); }
+    }
+
+    if (texto) {
+      const nombreRemitente = msg.pushName || (msg.key.participant || jid).split('@')[0];
+      logMensaje({ remitente: nombreRemitente, texto, esGrupo });
+    }
+
+    if (msg.pushName) {
+      const idCrudo = msg.key.participantPn || msg.key.participant || jid;
+      const idRemitente = `${idCrudo.split('@')[0]}@s.whatsapp.net`;
+      const dbNombre = leerDB();
+      const usuarioNombre = getUsuario(dbNombre, idRemitente);
+      if (usuarioNombre.nombre !== msg.pushName) {
+        usuarioNombre.nombre = msg.pushName;
+        const { guardarDB } = require('./lib/db');
+        guardarDB(dbNombre);
+      }
+    }
+
+    if (config.soloOwner) {
+      const esOwnerCheckPrivado = await esOwnerBot(sock, config, msg);
+      if (!esOwnerCheckPrivado) return;
+    }
+
+    let prefix = config.prefix || '.';
+    if (esGrupo) {
+      const db = leerDB();
+      const grupo = getGrupo(db, jid);
+      if (grupo.prefix) prefix = grupo.prefix;
+    }
+
+    const { propuestasPorMensaje, limpiarExpiradas } = require('./lib/matrimonio');
+    limpiarExpiradas();
+    const stanzaIdRespuesta = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
+    if (!bloqueado && stanzaIdRespuesta && propuestasPorMensaje.has(stanzaIdRespuesta)) {
+      const propuesta = propuestasPorMensaje.get(stanzaIdRespuesta);
+      const remitenteRespuesta = msg.key.participant || msg.key.remoteJid;
+      const mismaPersonaCasar = async () => {
+        if (remitenteRespuesta.split('@')[0] === propuesta.para.split('@')[0]) return true;
+        try {
+          const { resolverJidReal } = require('./lib/identidad');
+          const metaCasar = await obtenerMetadataCacheada(sock, jid).catch(() => null);
+          const [x, y] = await Promise.all([
+            resolverJidReal(sock, remitenteRespuesta, metaCasar),
+            resolverJidReal(sock, propuesta.para, metaCasar)
+          ]);
+          const num = (v) => String(v || '').split('@')[0].split(':')[0];
+          const ids = (q) => [q.id, q.lid, q.jid, q.phoneNumber].filter(Boolean).map(num);
+          let igual = num(x) === num(y);
+          if (!igual) {
+            let ficha = (metaCasar && metaCasar.participants || []).find(q => ids(q).includes(num(propuesta.para)));
+            if (!ficha) {
+              const metaFresca = await obtenerMetadataCacheada(sock, jid, true).catch(() => null);
+              ficha = (metaFresca && metaFresca.participants || []).find(q => ids(q).includes(num(propuesta.para)));
+            }
+            if (ficha) igual = ids(ficha).includes(num(remitenteRespuesta));
+          }
+          if (igual) propuesta.para = remitenteRespuesta;
+          return igual;
+        } catch (e) { return false; }
+      };
+      if (await mismaPersonaCasar()) {
+        const respuestaTexto = texto.trim().toLowerCase();
+        if (respuestaTexto === 'si' || respuestaTexto === 'sí') {
+          propuestasPorMensaje.delete(stanzaIdRespuesta);
+          if (propuesta.tipo === 'adopcion') { await require('./lib/familia').aceptarAdopcion(sock, propuesta); return; }
+          const { guardarDB } = require('./lib/db');
+          const dbCasar = leerDB();
+          const perfilDe = getUsuario(dbCasar, propuesta.de);
+          const perfilPara = getUsuario(dbCasar, propuesta.para);
+          if (perfilDe.pareja || perfilPara.pareja) {
+            await sock.sendMessage(propuesta.jid, { text: 'Una de las dos personas ya esta casada, la propuesta ya no es valida.' });
+          } else {
+            perfilDe.pareja = propuesta.para;
+            perfilPara.pareja = propuesta.de;
+            require('./lib/matrimonio').registrarBoda(perfilDe, propuesta.de, perfilPara, propuesta.para);
+            guardarDB(dbCasar);
+            await require('./lib/familia').celebrarBoda(sock, propuesta);
+          }
+          return;
+        }
+        if (respuestaTexto === 'no') {
+          propuestasPorMensaje.delete(stanzaIdRespuesta);
+          await sock.sendMessage(propuesta.jid, {
+            text: `💔 @${propuesta.para.split('@')[0]} rechazo la propuesta de @${propuesta.de.split('@')[0]}.`,
+            mentions: [propuesta.de, propuesta.para]
+          });
+          return;
+        }
+      }
+    }
+
+    const botonId = msg.message?.templateButtonReplyMessage?.selectedId;
+    if (!bloqueado && botonId && botonId.includes('|')) {
+      const [comandoBoton, urlBoton] = botonId.split('|');
+      const comandoEncontrado = comandos.get(normalizarComando(comandoBoton));
+      if (comandoEncontrado) {
+        if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comandoEncontrado, { prefix }))) return;
+        const textoFalso = `${prefix}${comandoBoton} ${urlBoton}`;
+        try {
+          await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
+          await comandoEncontrado.execute(sock, jid, msg, { prefix, texto: textoFalso, comandos });
+        } catch (err) {
+          console.error(err);
+          await sock.sendMessage(jid, { text: 'Ocurrio un error al procesar la descarga.' });
+        }
+      }
+      return;
+    }
+
+    let idSeleccionado = null;
+    const nativeFlowRaw = msg.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+    if (nativeFlowRaw) {
+      try {
+        const seleccion = JSON.parse(nativeFlowRaw);
+        idSeleccionado = seleccion?.id || null;
+      } catch (e) {}
+    }
+    if (!idSeleccionado) idSeleccionado = msg.message?.listResponseMessage?.singleSelectReply?.selectedRowId || null;
+    if (!idSeleccionado) idSeleccionado = msg.message?.buttonsResponseMessage?.selectedButtonId || null;
+    if (!idSeleccionado) {
+      const selectedIdDirecto = msg.message?.templateButtonReplyMessage?.selectedId;
+      if (selectedIdDirecto && !selectedIdDirecto.includes('|')) idSeleccionado = selectedIdDirecto;
+    }
+
+    if (!bloqueado && idSeleccionado && idSeleccionado.startsWith(prefix)) {
+      const argsSel = idSeleccionado.slice(prefix.length).trim().split(/\s+/);
+      const nombreComandoSel = argsSel[0];
+      const comandoSel = comandos.get(normalizarComando(nombreComandoSel));
+      if (comandoSel) {
+        if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comandoSel, { prefix }))) return;
+        try {
+          await sock.sendMessage(jid, { react: { text: '⚡', key: msg.key } });
+          await comandoSel.execute(sock, jid, msg, { prefix, texto: idSeleccionado, comandos });
+        } catch (err) {
+          console.error(err);
+          await sock.sendMessage(jid, { text: 'Ocurrio un error al procesar la seleccion.' });
+        }
+      }
+      return;
+    }
+
+    if (esGrupo) {
+      const { guardarDB } = require('./lib/db');
+      const { caja } = require('./lib/estilo');
+      const { resolverJidReal } = require('./lib/identidad');
+      const db = leerDB();
+      const remitenteCrudo = msg.key.participant;
+      // Mismo motivo que en el handler de bienvenida/despedida: WhatsApp a
+      // veces reporta al mismo usuario con distinto JID (numero real vs
+      // @lid). Si usamos el JID crudo como llave de la base de datos, cosas
+      // como .mute pueden guardarse bajo una llave y buscarse bajo otra,
+      // fallando en silencio. Aqui siempre resolvemos al mismo identificador.
+      const metadataParaResolver = await obtenerMetadataCacheada(sock, jid).catch(() => null);
+      const remitente = await resolverJidReal(sock, remitenteCrudo, metadataParaResolver);
+      const usuario = getUsuario(db, remitente);
+      const grupo = getGrupo(db, jid);
+
+      // Si es alguien registrado (.registrar) que escribe con otro id (ej. su @lid), se aprende para reconocerlo siempre
+      try { require('./lib/registro').aprenderAlias(db, remitenteCrudo, remitente); } catch (_) { /* no es critico */ }
+
+      if (!grupo.actividad) grupo.actividad = {};
+      if (!grupo.mensajes) grupo.mensajes = {};
+      grupo.actividad[remitente] = Date.now();
+      grupo.mensajes[remitente] = (grupo.mensajes[remitente] || 0) + 1;
+      guardarDB(db);
+
+      // El mute es por grupo (grupo.muteados), no global
+      if (grupo.muteados && grupo.muteados[remitente]) {
+        // Al super owner del bot nunca se le silencia (la revision solo corre cuando hay un muteado escribiendo)
+        let dejarPasar = false;
+        try { dejarPasar = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { dejarPasar = false; }
+        // Un muteado todavia puede escribir .unmuteall (solo lo ejecuta si es admin u owner)
+        const prefijoMute = grupo.prefix || config.prefix || '.';
+        if (!dejarPasar && texto.startsWith(prefijoMute)) {
+          const cmdMute = comandos.get(normalizarComando(texto.slice(prefijoMute.length).trim().split(/\s+/)[0]));
+          dejarPasar = !!(cmdMute && cmdMute.permiteMuteado);
+        }
+        if (!dejarPasar) {
+          await sock.sendMessage(jid, { delete: msg.key });
+          return;
+        }
+      }
+
+      if (grupo.antiflood || grupo.antispam) {
+        global.controlFlood = global.controlFlood || {};
+        const clave = `${jid}-${remitente}`;
+        const ahora = Date.now();
+        const registro = global.controlFlood[clave] || { mensajes: [], ultimoTexto: null, repeticiones: 0 };
+
+        if (grupo.antiflood) {
+          registro.mensajes = registro.mensajes.filter(t => ahora - t < 10000);
+          registro.mensajes.push(ahora);
+          if (registro.mensajes.length > 6) {
+            const { esAdminDelGrupo } = require('./lib/permisos');
+            const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente);
+            if (!esAdmin) {
+              if (!grupo.muteados) grupo.muteados = {};
+              grupo.muteados[remitente] = true;
+              guardarDB(db);
+              await sock.sendMessage(jid, {
+                text: `🚫 @${remitente.split('@')[0]} fue silenciado por flood (mensajes muy seguidos).`,
+                mentions: [remitente]
+              });
+              global.controlFlood[clave] = registro;
+              return;
+            }
+          }
+        }
+
+        if (grupo.antispam && texto) {
+          if (registro.ultimoTexto === texto) {
+            registro.repeticiones++;
+          } else {
+            registro.repeticiones = 0;
+            registro.ultimoTexto = texto;
+          }
+          if (registro.repeticiones >= 3) {
+            await sock.sendMessage(jid, { delete: msg.key });
+            global.controlFlood[clave] = registro;
+            return;
+          }
+        }
+        global.controlFlood[clave] = registro;
+      }
+
+      const tieneLink = /(https?:\/\/|www\.)\S+/i.test(texto);
+      if (grupo.antilink && tieneLink) {
+        const metadata = await sock.groupMetadata(jid);
+        let esAdmin = metadata.participants.find(p => p.id === remitente || p.phoneNumber === remitente)?.admin;
+        if (!esAdmin) { try { esAdmin = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { /* sigue como no-admin */ } } // el super owner no se borra
+        if (!esAdmin) {
+          await sock.sendMessage(jid, { delete: msg.key });
+          await sock.sendMessage(jid, { text: 'Enlace eliminado. El antilink esta activado.' });
+          return;
+        }
+      }
+
+      if (texto && grupo.simonAutomatico && !bloqueado) {
+        const { registrarMensaje, evaluarIntervencionSimon } = require('./lib/simonWatcher');
+        const nombreParaSimon = msg.pushName || remitente.split('@')[0];
+        registrarMensaje(jid, nombreParaSimon, texto);
+        evaluarIntervencionSimon(require('./lib/iaRespuestas').envolverSock(sock, 'simon'), jid).catch(err => {
+          console.error('Fallo el watcher de Simon:', err);
+        });
+      }
+    }
+
+    if (bloqueado) return;
+
+    // El owner responde (citando) al plan de un juego HTML que mando a .crearcmd
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/arcade-crear').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[arcade-crear]', e); }
+
+    // El owner responde (citando) a un plan de .crearcmd / .arreglarcmd: sigue la charla
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/crearcmd-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[crearcmd-plan]', e); }
+
+    // .repararcmd: el owner responde (citando) al plan de limpieza con "si" / "cancelar" / "conserva los de fun"
+    try {
+      if (texto && !texto.startsWith(prefix) && await require('./lib/cmdmaint-plan').manejarRespuesta({ sock, jid, msg, texto, comandos, prefix })) return;
+    } catch (e) { console.error('[cmdmaint-plan]', e); }
+
+    const { obtenerJuego, terminarJuego } = require('./lib/juegos');
+    const juegoActivo = obtenerJuego(jid);
+    if (juegoActivo && texto && !texto.startsWith(prefix)) {
+      try {
+        await juegoActivo.manejarRespuesta(sock, jid, msg, texto);
+      } catch (err) {
+        console.error(err);
+        terminarJuego(jid);
+      }
+      return;
+    }
+
+    // 3 en raya (.gato): con una partida activa, mandar solo el numero (1-9) o responder con el ya es una jugada
+    try {
+      if (texto && esGrupo && !texto.startsWith(prefix)) {
+        const tresRaya = comandos.get('3raya');
+        if (tresRaya && tresRaya.manejarNumeroSuelto && await tresRaya.manejarNumeroSuelto(sock, jid, msg, texto)) return;
+      }
+    } catch (err) { console.error('[3raya]', err); }
+
+    // Responder a un mensaje de Simi/Panda/Simon/Cupido sin escribir el comando
+    try {
+      if (texto && !texto.startsWith(prefix) && require('./lib/iaRespuestas').manejarRespuestaCitada({ sock, jid, msg, texto })) return;
+    } catch (err) {
+      console.error('[iaRespuestas]', err);
+    }
+
+    // PANDITA y MEI: IAs con voz, imagenes, audios y PDFs (solo actuan si estan activadas con .boton en este chat)
+    try {
+      if (await require('./lib/ia-personas').manejarMensaje({ sock, jid, msg, texto, esGrupo, prefix, comandos, obtenerMetadata: obtenerMetadataCacheada })) return;
+    } catch (e) { console.error('[ia-personas] hook:', e); }
+
+    if (!texto.startsWith(prefix)) return;
+
+    const args = texto.slice(prefix.length).trim().split(/\s+/);
+    const nombreComando = args[0];
+    const comando = comandos.get(normalizarComando(nombreComando));
+
+    if (!comando) return;
+
+    // .menuowner: si quien lo escribe no es owner, el bot ni reacciona ni responde (silencio total)
+    if (comando.silencioNoOwner && !(await esOwnerBot(sock, config, msg))) return;
+
+    if (comando.groupOnly && !esGrupo) {
+      return sock.sendMessage(jid, { text: 'Este comando solo funciona dentro de un grupo.' });
+    }
+
+    if (esGrupo) {
+      const dbCheck = leerDB();
+      const grupoCheck = getGrupo(dbCheck, jid);
+      const remitenteCheck = msg.key.participant;
+      const esOwnerCheck = await esOwnerBot(sock, config, msg);
+
+      let metadataCheck = null;
+      let esAdminCheck = false;
+
+      if (grupoCheck.soloAdmins || (grupoCheck.permisosCategorias && Object.keys(grupoCheck.permisosCategorias).length)) {
+        metadataCheck = await sock.groupMetadata(jid);
+        let remitenteResuelto = remitenteCheck;
+        try {
+          const [info] = await sock.onWhatsApp(remitenteCheck);
+          if (info?.lid) remitenteResuelto = info.lid;
+        } catch (e) {}
+        const remitenteNum = remitenteResuelto.split("@")[0];
+        esAdminCheck = metadataCheck.participants.find(p => {
+          const pId = (p.id || "").split("@")[0];
+          const pPhone = (p.phoneNumber || "").split("@")[0];
+          return pId === remitenteNum || pPhone === remitenteNum || pId === remitenteCheck.split("@")[0];
+        })?.admin;
+      }
+
+      // Modo admin + permisos por categoria: una categoria puesta en "todos" (.permisos <categoria> todos) queda abierta aunque haya modo admin
+      const categoriaComando = comando.category || 'general';
+      const acceso = require('./lib/acceso-categoria').decidirAcceso({
+        soloAdmins: !!grupoCheck.soloAdmins,
+        permisoCategoria: grupoCheck.permisosCategorias?.[categoriaComando],
+        esAdmin: !!esAdminCheck,
+        esOwner: !!esOwnerCheck
+      });
+      if (acceso === 'modo-admin') return;
+      if (acceso === 'categoria-admins') {
+        return sock.sendMessage(jid, { text: `Los comandos de la categoria *${categoriaComando}* solo pueden ser usados por admins.` });
+      }
+    }
+
+    // NSFW (categorias nsfw / nsfw2 y comandos marcados): apagado por defecto, solo mayores de 18 registrados, ver lib/nsfw.js
+    if (!(await require('./lib/nsfw').permitirNsfw(sock, jid, msg, comando, { prefix }))) return;
+
+    try {
+      const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
+      await sock.sendMessage(jid, { react: { text: emojiCategoria, key: msg.key } });
+      await comando.execute(require('./lib/iaRespuestas').envolverSockSiEsIA(sock, comando), jid, msg, { prefix, texto, comandos });
+    } catch (err) {
+      console.error(err);
+      await sock.sendMessage(jid, { text: 'Ocurrio un error al ejecutar el comando.' });
+    }
+  });
+}
+
+// Arcade: por defecto el juego se manda como archivo (sin servidor). Solo si el owner pone .arcade modo link se enciende el mini servidor web.
+try { require('./lib/arcade-web').iniciarSiHaceFalta(); } catch (err) { console.error('[arcade] no pude iniciar el servidor web:', err.message); }
+
+startBot();
