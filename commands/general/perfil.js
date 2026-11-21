@@ -67,15 +67,25 @@ module.exports = {
     // ===== Tarjeta en imagen =====
     try {
       const { crearPerfil } = require('../../lib/perfilcard');
-      const avatar = await descargarAvatar(sock, objetivo);
+      let avatar = null;
+      if (usuario.perfilFoto) {
+        try { const rf = require('path').join(__dirname, '..', '..', 'database', 'perfil-fotos', usuario.perfilFoto); if (require('fs').existsSync(rf)) avatar = require('fs').readFileSync(rf); } catch (_) { avatar = null; }
+      }
+      if (!avatar) avatar = await descargarAvatar(sock, objetivo);
+      let banner = null;
+      if (usuario.perfilBanner) {
+        try { const rb = require('path').join(__dirname, '..', '..', 'database', 'perfil-fotos', usuario.perfilBanner); if (require('fs').existsSync(rb)) banner = require('fs').readFileSync(rb); } catch (_) { banner = null; }
+      }
       const png = await crearPerfil({
-        nombre: nombreDe(objetivo),
+        nombre: usuario.perfilNombre || nombreDe(objetivo),
         titulo: usuario.perfilTitulo || '',
         desc: usuario.descripcion || '',
         genero,
         cumple,
         tema,
         avatar,
+        marco: usuario.perfilMarco || 'circulo',
+        banner,
         saldo: usuario.saldo || 0,
         banco: usuario.banco || 0,
         warns: usuario.warns || 0,

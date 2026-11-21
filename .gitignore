@@ -65,3 +65,8 @@ reacsticker-cache/
 # Cubre auth_info/, auth_info.respaldo/, auth_info_baileys/, etc.
 auth_info*/
 *.respaldo/
+
+# Fotos de perfil personalizadas de usuarios (datos, no subir)
+database/perfil-fotos/
+database.json
+.env
