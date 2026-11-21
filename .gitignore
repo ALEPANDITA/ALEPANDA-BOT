@@ -70,3 +70,10 @@ auth_info*/
 database/perfil-fotos/
 database.json
 .env
+database.respaldo.json
+config.json
+index.js.bak-*
+index.js.antes-*
+*.zip
+B9AMhLe0YlYoWG8PgXOoX4FGX3y2OT5
+deno.lock
