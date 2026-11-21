@@ -1,4 +1,5 @@
 const { leerDB } = require('../../lib/db');
+const { unirIdentidad, claveCanonica, guardarDB } = require('../../lib/db');
 const { caja, advertencia } = require('../../lib/estilo');
 
 const PUNTOS_RAREZA = { COMUN: 1, RARA: 3, EPICA: 8, LEGENDARIA: 20 };
@@ -13,13 +14,20 @@ module.exports = {
     const db = leerDB();
 
     const lista = [];
+    const vistos = new Set();
     for (const p of metadata.participants) {
-      const usuario = db.usuarios[p.id];
+      unirIdentidad(db, [p.id, p.lid, p.jid, p.phoneNumber].filter(Boolean));
+      const llave = claveCanonica(db, p.id);
+      if (vistos.has(llave)) continue;
+      vistos.add(llave);
+      const usuario = db.usuarios[llave];
       if (usuario?.waifus?.length) {
         const puntos = usuario.waifus.reduce((acc, w) => acc + (PUNTOS_RAREZA[w.rareza] || 1), 0);
         lista.push({ id: p.id, cantidad: usuario.waifus.length, puntos });
       }
     }
+
+    guardarDB(db);
 
     if (!lista.length) {
       return sock.sendMessage(jid, { text: advertencia('Nadie ha coleccionado personajes todavia en este grupo.', { titulo: 'TOP GACHA' }) });

@@ -1,4 +1,5 @@
 const { leerDB, getUsuario } = require('../../lib/db');
+const { llavePersona } = require('../../lib/economiaid');
 const { EMOJI_RAREZA, ARQUETIPOS } = require('../../lib/gachaanime');
 
 function buscarRareza(nombre) {
@@ -19,7 +20,7 @@ module.exports = {
     const objetivo = mencionado || citado || remitente;
 
     const db = leerDB();
-    const perfil = getUsuario(db, objetivo);
+    const perfil = getUsuario(db, await llavePersona(sock, jid, db, objetivo));
     const coleccion = perfil.gachaAnime || {};
     const nombres = Object.keys(coleccion);
 

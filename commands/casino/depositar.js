@@ -1,15 +1,15 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { llaveRemitente } = require('../../lib/economiaid');
 
 module.exports = {
   name: 'depositar',
   category: 'casino',
   description: 'Deposita diamantes en el banco (ej: .depositar 100 o .depositar all)',
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const who = msg.key.participant || msg.key.remoteJid;
     const valor = texto.slice((prefix + 'depositar ').length).trim().toLowerCase();
 
     const db = leerDB();
-    const usuario = getUsuario(db, who);
+    const usuario = getUsuario(db, await llaveRemitente(sock, jid, db, msg));
 
     const monto = valor === 'all' ? usuario.saldo : parseInt(valor);
 

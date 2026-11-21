@@ -4,12 +4,12 @@ const { obtenerImagenAnime, descargarImagenBuffer } = require('../../lib/animeap
 
 const COSTO = 50;
 const COOLDOWN_MS = 20 * 60 * 1000;
-const TIEMPO_CLAIM_MS = 3 * 60 * 1000; // 3 minutos para reclamarlo con .claimanime
+const TIEMPO_CLAIM_MS = 3 * 60 * 1000; // 3 minutos para reclamarlo con .claim
 
 module.exports = {
   name: 'rollanime',
   category: 'gacha-anime',
-  description: 'Invoca una ilustracion aleatoria de anime (cuesta 50 monedas). Debes reclamarla con .claimanime.',
+  description: 'Invoca una ilustracion aleatoria de anime (cuesta 50 monedas). Debes reclamarla con .claim.',
   execute: async (sock, jid, msg) => {
     const remitente = msg.key.participant || msg.key.remoteJid;
     const db = leerDB();
@@ -31,7 +31,7 @@ module.exports = {
     if (perfil.pendingGachaAnime && (ahora - perfil.pendingGachaAnime.timestamp) < TIEMPO_CLAIM_MS) {
       const segRestantes = Math.ceil((TIEMPO_CLAIM_MS - (ahora - perfil.pendingGachaAnime.timestamp)) / 1000);
       return sock.sendMessage(jid, {
-        text: `⚠️ Ya tienes a *${perfil.pendingGachaAnime.nombre}* esperando. Usa *.claimanime* para reclamarlo (${segRestantes}s).`
+        text: `⚠️ Ya tienes a *${perfil.pendingGachaAnime.nombre}* esperando. Usa *.claim* para reclamarlo (${segRestantes}s).`
       }, { quoted: msg });
     }
 
@@ -54,7 +54,7 @@ module.exports = {
     const caption =
       `${EMOJI_RAREZA[resultado.rareza]} *¡Encontraste una ilustracion!*\n\n` +
       `${yaExiste ? 'Ya tienes copias de este tipo.' : '¡Primera vez que consigues este tipo!'}\n` +
-      `⏳ Usa *.claimanime* dentro de los proximos ${minutosClaim} minutos o la perderas.\n` +
+      `⏳ Usa *.claim* dentro de los proximos ${minutosClaim} minutos o la perderas.\n` +
       `💰 Saldo restante: $${perfil.saldo}`;
 
     try {

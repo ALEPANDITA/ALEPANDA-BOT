@@ -1,5 +1,5 @@
 const { leerConfig } = require('../../lib/config');
-const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { leerDB, guardarDB, getUsuario, unirIdentidad } = require('../../lib/db');
 const { resolverLid, esOwnerBot } = require('../../lib/permisos');
 const { exito, advertencia } = require('../../lib/estilo');
 
@@ -71,6 +71,7 @@ module.exports = {
 
     const db = leerDB();
     const { clave, numeroReal } = await resolverReceptor(sock, jid, objetivo, db);
+    unirIdentidad(db, [objetivo, clave, numeroReal && `${numeroReal}@s.whatsapp.net`]);
     const receptor = getUsuario(db, clave);
     receptor.saldo += monto;
     guardarDB(db);

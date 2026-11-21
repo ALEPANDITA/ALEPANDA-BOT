@@ -212,10 +212,8 @@ async function startBot() {
       intervaloSubastas = setInterval(async () => {
         try {
           const { leerDB } = require('./lib/db');
-          const { finalizarSubastasVencidas } = require('./lib/mercado');
           const { finalizarSubastasVencidasAnime } = require('./lib/mercadoanime');
           const db = leerDB();
-          await finalizarSubastasVencidas(sock, db);
           await finalizarSubastasVencidasAnime(sock, db);
         } catch (err) {
           console.error('[subastas] Error revisando subastas vencidas:', err);
@@ -641,6 +639,11 @@ async function startBot() {
       // fallando en silencio. Aqui siempre resolvemos al mismo identificador.
       const metadataParaResolver = await obtenerMetadataCacheada(sock, jid).catch(() => null);
       const remitente = await resolverJidReal(sock, remitenteCrudo, metadataParaResolver);
+      // Une todos los ids de esta persona (lid, numero real, ficha del grupo) en UNA sola cartera para toda la economia
+      try {
+        const fichaRem = (metadataParaResolver && metadataParaResolver.participants || []).find((p) => [p.id, p.lid, p.jid, p.phoneNumber].filter(Boolean).includes(remitenteCrudo));
+        require('./lib/db').unirIdentidad(db, [remitenteCrudo, msg.key.participantPn, msg.key.participantAlt, remitente, fichaRem && fichaRem.id, fichaRem && fichaRem.lid, fichaRem && fichaRem.jid, fichaRem && fichaRem.phoneNumber]);
+      } catch (e) { console.error('[identidad]', e.message); }
       const usuario = getUsuario(db, remitente);
       const grupo = getGrupo(db, jid);
 

@@ -1,4 +1,6 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { claveCanonica } = require('../../lib/db');
+const { llaveRemitente } = require('../../lib/economiaid');
 const { asegurarMercadoAnime, finalizarSubastasVencidasAnime } = require('../../lib/mercadoanime');
 const { formatoTiempo } = require('../../lib/mercado');
 
@@ -27,7 +29,8 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'Esa subasta no existe o ya termino.' }, { quoted: msg });
     }
 
-    if (subasta.vendedor === remitente) {
+    const llaveYo = await llaveRemitente(sock, jid, db, msg);
+    if (claveCanonica(db, subasta.vendedor) === llaveYo) {
       return sock.sendMessage(jid, { text: 'No puedes pujar en tu propia subasta.' }, { quoted: msg });
     }
 
@@ -35,20 +38,20 @@ module.exports = {
       return sock.sendMessage(jid, { text: `Tu puja debe ser mayor a $${subasta.precioActual}.` }, { quoted: msg });
     }
 
-    const postor = getUsuario(db, remitente);
+    const postor = getUsuario(db, llaveYo);
 
-    if (subasta.mejorPostor === remitente) {
+    if (claveCanonica(db, subasta.mejorPostor) === llaveYo) {
       postor.saldo += subasta.precioActual;
     }
 
     if (postor.saldo < monto) {
-      if (subasta.mejorPostor === remitente) {
+      if (claveCanonica(db, subasta.mejorPostor) === llaveYo) {
         postor.saldo -= subasta.precioActual;
       }
       return sock.sendMessage(jid, { text: `No tienes suficientes monedas. Necesitas $${monto} y tienes $${postor.saldo}.` }, { quoted: msg });
     }
 
-    if (subasta.mejorPostor && subasta.mejorPostor !== remitente) {
+    if (subasta.mejorPostor && claveCanonica(db, subasta.mejorPostor) !== llaveYo) {
       const anterior = getUsuario(db, subasta.mejorPostor);
       anterior.saldo += subasta.precioActual;
     }

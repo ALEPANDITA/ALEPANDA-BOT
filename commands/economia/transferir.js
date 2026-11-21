@@ -1,15 +1,12 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { llaveRemitente, llavePersona, objetivoDe } = require('../../lib/economiaid');
 
 module.exports = {
   name: 'transferir',
   category: 'economia',
   description: 'Enviar dinero a otro usuario (responde o menciona + monto)',
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const remitente = msg.key.participant || msg.key.remoteJid;
-
-    const mencionado = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-    const citado = msg.message.extendedTextMessage?.contextInfo?.participant;
-    const objetivo = mencionado || citado;
+    const objetivo = objetivoDe(msg);
 
     if (!objetivo) {
       return sock.sendMessage(jid, { text: `Menciona o responde a alguien: ${prefix}transferir <monto>` });
@@ -22,15 +19,19 @@ module.exports = {
       return sock.sendMessage(jid, { text: `Uso: ${prefix}transferir <monto> (mencionando o respondiendo a alguien)` });
     }
 
-    if (objetivo === remitente) {
+    const db = leerDB();
+    const llaveYo = await llaveRemitente(sock, jid, db, msg);
+    const llaveReceptor = await llavePersona(sock, jid, db, objetivo);
+
+    if (llaveYo === llaveReceptor) {
       return sock.sendMessage(jid, { text: 'No puedes transferirte dinero a ti mismo.' });
     }
 
-    const db = leerDB();
-    const usuario = getUsuario(db, remitente);
-    const receptor = getUsuario(db, objetivo);
+    const usuario = getUsuario(db, llaveYo);
+    const receptor = getUsuario(db, llaveReceptor);
 
     if (usuario.saldo < monto) {
+      guardarDB(db);
       return sock.sendMessage(jid, { text: `No tienes suficiente saldo. Tu saldo: $${usuario.saldo}` });
     }
 

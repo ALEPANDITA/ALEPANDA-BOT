@@ -4,7 +4,7 @@ const { EMOJI_RAREZA } = require('../../lib/gachaanime');
 const TIEMPO_CLAIM_MS = 3 * 60 * 1000; // debe coincidir con rollanime.js
 
 module.exports = {
-  name: 'claimanime',
+  name: 'claim',
   category: 'gacha-anime',
   description: 'Reclama la ilustracion de anime que te salio con .rollanime',
   execute: async (sock, jid, msg) => {

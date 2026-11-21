@@ -1,4 +1,5 @@
 const { leerDB, getUsuario } = require('../../lib/db');
+const { llavePersona } = require('../../lib/economiaid');
 const { caja, advertencia } = require('../../lib/estilo');
 
 module.exports = {
@@ -11,7 +12,7 @@ module.exports = {
     const objetivo = mencionado || remitente;
 
     const db = leerDB();
-    const usuario = getUsuario(db, objetivo);
+    const usuario = getUsuario(db, await llavePersona(sock, jid, db, objetivo));
 
     if (!usuario.waifus.length) {
       return sock.sendMessage(jid, {

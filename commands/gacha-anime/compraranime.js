@@ -1,4 +1,6 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { claveCanonica } = require('../../lib/db');
+const { llaveRemitente } = require('../../lib/economiaid');
 const { EMOJI_RAREZA } = require('../../lib/gachaanime');
 const { asegurarMercadoAnime } = require('../../lib/mercadoanime');
 
@@ -23,11 +25,12 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'Ese ID no existe o ya no esta disponible.' }, { quoted: msg });
     }
 
-    if (venta.vendedor === remitente) {
+    const llaveYo = await llaveRemitente(sock, jid, db, msg);
+    if (claveCanonica(db, venta.vendedor) === llaveYo) {
       return sock.sendMessage(jid, { text: 'No puedes comprarte tu propia ilustracion. Usa .cancelarventaanime para retirarla.' }, { quoted: msg });
     }
 
-    const comprador = getUsuario(db, remitente);
+    const comprador = getUsuario(db, llaveYo);
     if (comprador.saldo < venta.precio) {
       return sock.sendMessage(jid, { text: `No tienes suficientes monedas. Necesitas $${venta.precio} y tienes $${comprador.saldo}.` }, { quoted: msg });
     }

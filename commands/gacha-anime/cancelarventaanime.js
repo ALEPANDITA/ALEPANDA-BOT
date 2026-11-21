@@ -1,4 +1,6 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { claveCanonica } = require('../../lib/db');
+const { llaveRemitente } = require('../../lib/economiaid');
 const { asegurarMercadoAnime } = require('../../lib/mercadoanime');
 
 module.exports = {
@@ -22,11 +24,12 @@ module.exports = {
       return sock.sendMessage(jid, { text: 'Ese ID no existe o ya no esta disponible.' }, { quoted: msg });
     }
 
-    if (venta.vendedor !== remitente) {
+    const llaveYo = await llaveRemitente(sock, jid, db, msg);
+    if (claveCanonica(db, venta.vendedor) !== llaveYo) {
       return sock.sendMessage(jid, { text: 'Esa venta no es tuya.' }, { quoted: msg });
     }
 
-    const perfil = getUsuario(db, remitente);
+    const perfil = getUsuario(db, llaveYo);
     if (!perfil.gachaAnime) perfil.gachaAnime = {};
     perfil.gachaAnime[venta.nombre] = (perfil.gachaAnime[venta.nombre] || 0) + 1;
 

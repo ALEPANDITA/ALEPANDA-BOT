@@ -6,7 +6,7 @@ const { exito, advertencia } = require('../../lib/estilo');
 module.exports = {
   name: 'resetgacha',
   category: 'owner',
-  description: 'Reinicia el cooldown y los pendientes de reclamo del gacha HP y del gacha anime (solo owner).',
+  description: 'Reinicia el cooldown y los pendientes de reclamo del gacha anime (solo owner).',
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
     const autorizado = await esOwnerBot(sock, config, msg);
@@ -24,12 +24,6 @@ module.exports = {
       const perfil = db.usuarios[id];
       let tocado = false;
 
-      if (perfil.lastGachaHP || perfil.pendingGachaHP) {
-        perfil.lastGachaHP = 0;
-        delete perfil.pendingGachaHP;
-        tocado = true;
-      }
-
       if (perfil.lastGachaAnime || perfil.pendingGachaAnime) {
         perfil.lastGachaAnime = 0;
         delete perfil.pendingGachaAnime;
@@ -43,7 +37,7 @@ module.exports = {
 
     await sock.sendMessage(jid, {
       text: exito(
-        `Se reinicio el cooldown de *gacha HP* y *gacha anime* para todos los usuarios.\n\nUsuarios afectados: ${afectados}`,
+        `Se reinicio el cooldown de *gacha anime* para todos los usuarios.\n\nUsuarios afectados: ${afectados}`,
         { titulo: 'GACHA REINICIADO', estilo: 'neon' }
       )
     }, { quoted: msg });

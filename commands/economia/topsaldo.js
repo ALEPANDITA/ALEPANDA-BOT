@@ -1,4 +1,4 @@
-const { leerDB } = require('../../lib/db');
+const { leerDB, guardarDB, unirIdentidad, claveCanonica } = require('../../lib/db');
 
 module.exports = {
   name: 'topsaldo',
@@ -9,16 +9,26 @@ module.exports = {
     const metadata = await sock.groupMetadata(jid);
     const db = leerDB();
 
-    const idsGrupo = metadata.participants.map(p => p.id);
+    // Misma identidad unica que usan todos los comandos de economia: se juntan las carteras de cada miembro
+    // (su @lid, su numero real...) y se cuenta una sola vez por persona.
     const lista = [];
-
-    for (const id of idsGrupo) {
-      const usuario = db.usuarios[id];
+    const vistos = new Set();
+    let cambio = false;
+    for (const p of metadata.participants) {
+      const ids = [p.id, p.lid, p.jid, p.phoneNumber].filter(Boolean);
+      const antes = JSON.stringify(db.alias_economia || {}) + Object.keys(db.usuarios).length;
+      unirIdentidad(db, ids);
+      if (antes !== JSON.stringify(db.alias_economia || {}) + Object.keys(db.usuarios).length) cambio = true;
+      const llave = claveCanonica(db, p.id);
+      if (vistos.has(llave)) continue;
+      vistos.add(llave);
+      const usuario = db.usuarios[llave];
       if (usuario) {
         const total = (usuario.saldo || 0) + (usuario.banco || 0);
-        lista.push({ id, saldo: usuario.saldo || 0, banco: usuario.banco || 0, total });
+        lista.push({ id: p.id, saldo: usuario.saldo || 0, banco: usuario.banco || 0, total });
       }
     }
+    if (cambio) guardarDB(db);
 
     if (!lista.length) {
       return sock.sendMessage(jid, { text: 'Todavia no hay datos economicos en este grupo.' });

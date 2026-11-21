@@ -1,15 +1,15 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { llaveRemitente } = require('../../lib/economiaid');
 
 module.exports = {
   name: 'retirar',
   category: 'casino',
   description: 'Retira diamantes del banco (ej: .retirar 100 o .retirar all)',
   execute: async (sock, jid, msg, { texto, prefix }) => {
-    const who = msg.key.participant || msg.key.remoteJid;
     const valor = texto.slice((prefix + 'retirar ').length).trim().toLowerCase();
 
     const db = leerDB();
-    const usuario = getUsuario(db, who);
+    const usuario = getUsuario(db, await llaveRemitente(sock, jid, db, msg));
 
     const monto = valor === 'all' ? usuario.banco : parseInt(valor);
 

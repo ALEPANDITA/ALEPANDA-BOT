@@ -1,7 +1,7 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
 const { exito, advertencia } = require('../../lib/estilo');
 
-const MAX_CARACTERES = 180;
+const MAX_CARACTERES = 400;
 
 // Descripcion que sale en .perfil. Sin texto: si ya tenias una, la borra.
 module.exports = {

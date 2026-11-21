@@ -72,6 +72,7 @@ module.exports = {
           nombre: personaje.nombre,
           serie: personaje.serie,
           rareza: personaje.rareza.nombre,
+          imagen: personaje.imagen,
           fecha: Date.now()
         });
         guardarDB(dbClaim);
