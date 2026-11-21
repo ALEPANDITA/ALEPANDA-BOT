@@ -59,6 +59,7 @@ module.exports = {
 
     try {
       const img = await obtenerImagenAnime(resultado.categoriaApi);
+      try { const dbImg = leerDB(); const pImg = getUsuario(dbImg, remitente); if (pImg.pendingGachaAnime && pImg.pendingGachaAnime.timestamp === ahora) { pImg.pendingGachaAnime.imagen = img.url; guardarDB(dbImg); } } catch (_) { /* no es critico */ }
       const buffer = await descargarImagenBuffer(img.url);
       const credito = img.artist_name ? `\n🎨 Arte: ${img.artist_name}` : '';
       await sock.sendMessage(jid, {

@@ -86,6 +86,7 @@ module.exports = {
         avatar,
         marco: usuario.perfilMarco || 'circulo',
         banner,
+        tamano: usuario.perfilTamano || 'grande',
         saldo: usuario.saldo || 0,
         banco: usuario.banco || 0,
         warns: usuario.warns || 0,

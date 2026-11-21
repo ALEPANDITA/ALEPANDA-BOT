@@ -41,6 +41,11 @@ module.exports = {
         const hallada = conFoto.find((x) => x.tipo === 'waifu' && x.id === w.id && x.imagen);
         if (hallada) w.imagen = hallada.imagen;
       }
+      for (const x of conFoto) {
+        if (x.tipo !== 'anime' || !x.imagen) continue;
+        if (!p2.gachaAnimeFotos) p2.gachaAnimeFotos = {};
+        if (!p2.gachaAnimeFotos[x.nombre]) p2.gachaAnimeFotos[x.nombre] = x.imagen;
+      }
       guardarDB(db2);
     }).catch(() => 0);
 

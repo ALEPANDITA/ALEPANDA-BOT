@@ -12,6 +12,28 @@ module.exports = {
     const db = leerDB();
     const perfil = getUsuario(db, remitente);
 
+    // ---- Sobre de 5 cartas (.sobre): solo lo reclama quien lo abrio ----
+    if (perfil.pendingSobre) {
+      const sobre = perfil.pendingSobre;
+      const LIMITE_SOBRE_MS = require('../../lib/cartasbot').TIEMPO_RECLAMO_SOBRE_MS;
+      if (Date.now() - sobre.timestamp > LIMITE_SOBRE_MS) {
+        delete perfil.pendingSobre;
+        guardarDB(db);
+        return sock.sendMessage(jid, { text: '💨 Tu sobre se perdió porque tardaste demasiado en reclamarlo.' }, { quoted: msg });
+      }
+      if (!perfil.gachaAnime) perfil.gachaAnime = {};
+      for (const c of sobre.cartas) {
+        perfil.gachaAnime[c.nombre] = (perfil.gachaAnime[c.nombre] || 0) + 1;
+        if (c.imagen) { if (!perfil.gachaAnimeFotos) perfil.gachaAnimeFotos = {}; perfil.gachaAnimeFotos[c.nombre] = c.imagen; }
+      }
+      delete perfil.pendingSobre;
+      guardarDB(db);
+      const lista = sobre.cartas.map((c, i) => `${i + 1}. ${EMOJI_RAREZA[c.rareza]} ${c.emoji} *${c.nombre}* (x${perfil.gachaAnime[c.nombre]})`).join('\n');
+      return sock.sendMessage(jid, {
+        text: `✅ *¡Reclamaste tu sobre!*\n\n${lista}\n\n📖 Míralas con *.album* o *.coleccionanime*. ¿Repetidas? *.vender duplicadas*`
+      }, { quoted: msg });
+    }
+
     const pendiente = perfil.pendingGachaAnime;
 
     if (!pendiente) {
@@ -35,6 +57,7 @@ module.exports = {
     const clave = pendiente.nombre;
     perfil.gachaAnime[clave] = (perfil.gachaAnime[clave] || 0) + 1;
     const copias = perfil.gachaAnime[clave];
+    if (pendiente.imagen) { if (!perfil.gachaAnimeFotos) perfil.gachaAnimeFotos = {}; perfil.gachaAnimeFotos[clave] = pendiente.imagen; }
 
     delete perfil.pendingGachaAnime;
     guardarDB(db);
