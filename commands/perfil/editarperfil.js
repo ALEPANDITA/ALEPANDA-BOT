@@ -127,6 +127,58 @@ module.exports = {
       guardarDB(db);
       return responder('🔠 Letras de tu perfil: *' + v + '*. Míralo con ' + prefix + 'perfil');
     }
+    // PARCHE-CASADOS: .editarperfil casados add | quitar | foto
+    if (opcion === 'casados' || opcion === 'casado' || opcion === 'pareja') {
+      const partesC = valor.split(/\s+/).filter(Boolean);
+      const sub = (partesC[0] || '').toLowerCase();
+      const resto = partesC.slice(1).join(' ');
+      if (sub === 'add' || sub === 'on' || sub === 'activar' || sub === 'agregar') {
+        if (!usuario.pareja) return responder('💍 Primero necesitas estar casado/a. Propón matrimonio con *' + prefix + 'casar @usuario*.');
+        usuario.perfilCasados = true;
+        guardarDB(db);
+        return responder('💞 Tarjeta de casados activada: tu perfil ahora es *más ancho* y sale tu foto junto a la de tu pareja.\nMíralo con ' + prefix + 'perfil\n\n_Cambiar la foto de tu pareja en tu tarjeta:_ ' + prefix + 'editarperfil casados foto (con una imagen)\n_Cambiar la tuya:_ ' + prefix + 'editarperfil foto');
+      }
+      if (sub === 'quitar' || sub === 'off' || sub === 'desactivar' || quitar.test(sub)) {
+        usuario.perfilCasados = false;
+        guardarDB(db);
+        return responder('💞 Tarjeta de casados desactivada. Tu perfil vuelve al tamaño normal.');
+      }
+      if (sub === 'foto' || sub === 'imagen') {
+        if (quitar.test(resto)) {
+          try { if (usuario.perfilFotoPareja) fs.unlinkSync(path.join(CARPETA_FOTOS, usuario.perfilFotoPareja)); } catch (_) {}
+          usuario.perfilFotoPareja = null;
+          guardarDB(db);
+          return responder('📷 Listo: en tu tarjeta saldrá la foto de perfil de tu pareja (la suya, no una elegida por ti).');
+        }
+        const fuenteP = imagenDelMensaje(msg);
+        if (!fuenteP) return responder('📷 Envía una imagen con el comando en el pie de foto, o responde a una imagen con *' + prefix + 'editarperfil casados foto*.\n_Será la foto de tu pareja en TU tarjeta (la suya no cambia)._\nPara volver a su foto de perfil: ' + prefix + 'editarperfil casados foto quitar');
+        try {
+          const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+          const bufferP = await downloadMediaMessage({ message: fuenteP }, 'buffer', {});
+          const Jimp = require('jimp');
+          const imgP = await Jimp.read(bufferP);
+          imgP.cover(512, 512).quality(88);
+          const salidaP = await imgP.getBufferAsync(Jimp.MIME_JPEG);
+          fs.mkdirSync(CARPETA_FOTOS, { recursive: true });
+          const archivoP = 'pareja-' + num(remitente) + '.jpg';
+          fs.writeFileSync(path.join(CARPETA_FOTOS, archivoP), salidaP);
+          usuario.perfilFotoPareja = archivoP;
+          guardarDB(db);
+          return responder('📷 Foto de tu pareja guardada para tu tarjeta. Míralo con ' + prefix + 'perfil');
+        } catch (err) {
+          console.error('[editarperfil casados foto]', err && err.message ? err.message : err);
+          return responder('No pude guardar la foto. Prueba con otra imagen.');
+        }
+      }
+      return responder(
+        '💞 *TARJETA DE CASADOS*\n\n' +
+        '• ' + prefix + 'editarperfil casados add\n   _Tu perfil se hace más ancho y sale tu foto junto a la de tu pareja_\n' +
+        '• ' + prefix + 'editarperfil casados foto\n   _Envía o responde a una imagen: la foto de tu pareja en tu tarjeta (la suya no cambia). "quitar" vuelve a su foto de perfil_\n' +
+        '• ' + prefix + 'editarperfil casados quitar\n   _Vuelve a la tarjeta normal_\n\n' +
+        'Tu foto la cambias con ' + prefix + 'editarperfil foto.\n' +
+        'Ahora: ' + (usuario.perfilCasados ? '*activada*' : '*desactivada*') + (usuario.pareja ? '' : ' (todavía no estás casado/a)')
+      );
+    }
     if (opcion === 'fototam' || opcion === 'tamfoto' || opcion === 'tamanofoto') {
       const v = valor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       if (quitar.test(v)) {
@@ -173,6 +225,7 @@ module.exports = {
       '• ' + prefix + 'editarperfil nombre <texto>\n   _El nombre que sale en tu tarjeta (máx. 25)_\n' +
       '• ' + prefix + 'editarperfil banner\n   _Envía o responde a una imagen: será el fondo de tu tarjeta. "quitar" la borra_\n' +
       '• ' + prefix + 'editarperfil letras <normal/grande/enorme>\n   _Qué tan grandes se ven las letras de tu tarjeta_\n' +
+      '• ' + prefix + 'editarperfil casados add\n   _Tarjeta ancha con tu foto y la de tu pareja (también: casados foto / casados quitar)_\n' +
       '• ' + prefix + 'editarperfil fototam <chica/grande/enorme>\n   _Qué tan grande se ve tu foto_\n' +
       '• ' + prefix + 'editarperfil marco <forma>\n   _Formas: ' + MARCOS.join(', ') + '_\n' +
       '• ' + prefix + 'editarperfil tema <color>\n   _Colores: ' + Object.keys(TEMAS).join(', ') + '_\n' +

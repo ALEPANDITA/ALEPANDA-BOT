@@ -100,6 +100,14 @@ module.exports = {
       if (usuario.perfilBanner) {
         try { const rb = require('path').join(__dirname, '..', '..', 'database', 'perfil-fotos', usuario.perfilBanner); if (require('fs').existsSync(rb)) banner = require('fs').readFileSync(rb); } catch (_) { banner = null; }
       }
+      // PARCHE-CASADOS: foto de la pareja (la que elegiste para ella, su foto de perfil o la de WhatsApp)
+      let casados = null;
+      if (usuario.perfilCasados && usuario.pareja) {
+        const perfilP = getUsuario(db, usuario.pareja);
+        const leerFoto = (archivo) => { try { if (!archivo) return null; const rf = require('path').join(__dirname, '..', '..', 'database', 'perfil-fotos', archivo); return require('fs').existsSync(rf) ? require('fs').readFileSync(rf) : null; } catch (_) { return null; } };
+        const fotoPareja = leerFoto(usuario.perfilFotoPareja) || leerFoto(perfilP.perfilFoto) || await descargarAvatar(sock, usuario.pareja);
+        casados = { nombre: perfilP.perfilNombre || nombreDe(usuario.pareja), avatar: fotoPareja };
+      }
       const png = await crearPerfil({
         nombre: usuario.perfilNombre || nombreDe(objetivo),
         titulo: usuario.perfilTitulo || '',
@@ -112,6 +120,7 @@ module.exports = {
         banner,
         tamano: usuario.perfilTamano || 'grande',
         fotoTam: usuario.perfilFotoTam || 'grande',
+        casados,
         saldo: usuario.saldo || 0,
         banco: usuario.banco || 0,
         warns: usuario.warns || 0,
