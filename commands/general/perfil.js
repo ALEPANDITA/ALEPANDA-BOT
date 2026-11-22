@@ -1,17 +1,22 @@
-const { leerDB, getUsuario } = require('../../lib/db');
+const { leerDB, getUsuario, claveCanonica } = require('../../lib/db');
 const { formatearCumple, edadDe } = require('../../lib/cumple');
 
 const TEMAS = { rosa: '🌸', azul: '💙', morado: '💜', verde: '💚', rojo: '❤️', dorado: '✨', negro: '🖤', naranja: '🧡', amarillo: '💛' };
 const num = (j) => String(j || '').split('@')[0].split(':')[0];
 const tag = (j) => '@' + num(j);
 
-// Nombre guardado en la base (registro) o, si no hay, el numero
+// Nombre guardado en la base (nombre de WhatsApp o registro). Se busca a la persona por TODAS sus formas de id
+// (llave unica de la economia, indice del registro, numero real y @lid): antes solo probaba una y por eso a veces no salia.
 function nombreConocido(db, id) {
   try {
     const n = num(id);
-    const llave = (db.registroIndice && db.registroIndice[n]) || `${n}@s.whatsapp.net`;
-    const u = (db.usuarios && (db.usuarios[llave] || db.usuarios[id])) || null;
-    return (u && (u.nombre || (u.registro && u.registro.nombre))) || null;
+    const llaves = [claveCanonica(db, id), db.registroIndice && db.registroIndice[n], `${n}@s.whatsapp.net`, id, `${n}@lid`];
+    for (const llave of llaves) {
+      const u = llave && db.usuarios && db.usuarios[llave];
+      const nombre = u && (u.nombre || (u.registro && u.registro.nombre));
+      if (nombre) return nombre;
+    }
+    return null;
   } catch (_) { return null; }
 }
 
@@ -41,7 +46,9 @@ module.exports = {
 
     const db = leerDB();
     const usuario = getUsuario(db, objetivo);
-    const nombreDe = (id) => (id === remitente && msg.pushName) || nombreConocido(db, id) || ('+' + num(id));
+    // Nombre de cada persona de la tarjeta: se llena mas abajo ("nombres"). Sin nombre se muestra su numero real, nunca el @lid.
+    const nombres = new Map();
+    const nombreDe = (id) => nombres.get(id) || nombreConocido(db, id) || (String(id).endsWith('@s.whatsapp.net') ? '+' + num(id) : 'Usuario');
 
     const tema = TEMAS[usuario.perfilTema] ? usuario.perfilTema : 'rosa';
     const genero = usuario.genero ? usuario.genero.charAt(0).toUpperCase() + usuario.genero.slice(1) : '';
@@ -63,6 +70,23 @@ module.exports = {
     }
     const hijos = Array.isArray(usuario.hijos) ? usuario.hijos : [];
     const padres = Array.isArray(usuario.padres) ? usuario.padres : [];
+
+    // Busca el nombre de quien sale en la tarjeta (pareja, hijos, padres): el de WhatsApp o el registro (por numero o @lid)
+    // y, si no se sabe, el del grupo; si de plano no hay nombre, su numero real.
+    {
+      const mismaPersona = (a, b) => num(a) === num(b) || claveCanonica(db, a) === claveCanonica(db, b);
+      let meta = null;
+      for (const id of new Set([objetivo, usuario.pareja, ...hijos, ...padres].filter(Boolean))) {
+        let nombre = (mismaPersona(id, remitente) && msg.pushName) || nombreConocido(db, id);
+        if (!nombre) {
+          if (meta === null) { try { meta = String(jid).endsWith('@g.us') ? await sock.groupMetadata(jid) : false; } catch (_) { meta = false; } }
+          const ficha = meta && meta.participants ? meta.participants.find((p) => [p.id, p.lid, p.jid, p.phoneNumber].filter(Boolean).some((x) => num(x) === num(id))) : null;
+          const real = ficha && ficha.phoneNumber ? num(ficha.phoneNumber) : (String(id).endsWith('@s.whatsapp.net') ? num(id) : null);
+          nombre = (ficha && (ficha.name || ficha.notify)) || (real ? '+' + real : 'Usuario');
+        }
+        nombres.set(id, nombre);
+      }
+    }
 
     // ===== Tarjeta en imagen =====
     try {
