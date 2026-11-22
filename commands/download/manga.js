@@ -67,10 +67,23 @@ const ratingParams = () => RATING.map((r) => ['contentRating[]', r]);
 const idiomaParams = (campo) => IDIOMAS.map((i) => [campo, i]);
 
 // ---------------- MangaDex ----------------
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+// Si pegan el enlace de MangaDex (o el ID) se usa ese manga; si no, se busca por nombre.
+// La búsqueda NO filtra por idioma: lo del español se revisa después en los capítulos de cada resultado.
 async function buscarMangas(query) {
+  const id = (query.match(UUID) || [])[0];
+  if (id) {
+    try {
+      const json = await pedir(`${API}/manga/${id}?` + parametros([['includes[]', 'cover_art']]));
+      return json.data ? [json.data] : [];
+    } catch (e) {
+      if (/respondió 404/.test(e.message)) return [];
+      throw e;
+    }
+  }
   const json = await pedir(`${API}/manga?` + parametros([
-    ['title', query], ['limit', '5'], ['order[relevance]', 'desc'], ['includes[]', 'cover_art'],
-    ...idiomaParams('availableTranslatedLanguage[]'), ...ratingParams()
+    ['title', query], ['limit', '8'], ['order[relevance]', 'desc'], ['includes[]', 'cover_art'], ...ratingParams()
   ]));
   return Array.isArray(json.data) ? json.data : [];
 }
@@ -108,16 +121,18 @@ function claveDe(valor) {
 }
 
 // Capítulos descargables en español, uno por número (si varios grupos lo subieron, quedan como alternativas).
+// También cuenta los capítulos en español que están en enlaces externos (MANGA Plus, etc.): esos no se pueden bajar.
+// Devuelve { caps, externos }.
 async function capitulosDe(mangaId) {
   const guardado = cacheCapitulos.get(mangaId);
-  if (guardado && Date.now() - guardado.t < CACHE_MS) return guardado.caps;
+  if (guardado && Date.now() - guardado.t < CACHE_MS) return guardado;
 
   const todos = [];
   for (let pagina = 0; pagina < 8; pagina++) {
     const offset = pagina * 500;
     const json = await pedir(`${API}/manga/${mangaId}/feed?` + parametros([
       ['limit', '500'], ['offset', String(offset)], ['order[chapter]', 'asc'],
-      ['includeExternalUrl', '0'], ['includeEmptyPages', '0'],
+      ['includeExternalUrl', '1'],
       ...idiomaParams('translatedLanguage[]'), ...ratingParams()
     ]));
     const datos = Array.isArray(json.data) ? json.data : [];
@@ -127,10 +142,12 @@ async function capitulosDe(mangaId) {
   }
 
   const porClave = new Map();
+  const clavesExternas = new Set();
   for (const ch of todos) {
     const a = ch.attributes || {};
-    if (a.externalUrl) continue;                                  // alojado fuera de MangaDex: no se puede bajar
     const clave = claveDe(a.chapter);
+    if (a.externalUrl) { clavesExternas.add(clave); continue; }   // alojado fuera de MangaDex: no se puede bajar
+    if (a.pages === 0) continue;                                  // sin páginas
     if (!porClave.has(clave)) {
       const numerico = /^\d+(\.\d+)?$/.test(clave) ? parseFloat(clave) : null;
       porClave.set(clave, { clave, n: numerico, etiqueta: clave === 'oneshot' ? 'Oneshot' : (numerico !== null ? clave : String(a.chapter).trim()), opciones: [] });
@@ -146,8 +163,22 @@ async function capitulosDe(mangaId) {
   });
   for (const c of caps) c.opciones.sort((x, y) => y.paginas - x.paginas).splice(2); // la versión más completa primero, 1 alternativa
 
-  cacheCapitulos.set(mangaId, { t: Date.now(), caps });
-  return caps;
+  const externos = [...clavesExternas].filter((k) => !porClave.has(k)).length;
+  const resultado = { t: Date.now(), caps, externos };
+  cacheCapitulos.set(mangaId, resultado);
+  return resultado;
+}
+
+// El primer resultado que tenga capítulos descargables en español. Si ninguno tiene, devuelve lo revisado para explicarlo.
+async function elegirManga(resultados) {
+  const saltados = [];
+  for (let i = 0; i < Math.min(resultados.length, 5); i++) {
+    if (i > 0) await esperar(250);
+    const { caps, externos } = await capitulosDe(resultados[i].id);
+    if (caps.length) return { manga: resultados[i], caps, saltados };
+    saltados.push({ manga: resultados[i], externos });
+  }
+  return { manga: null, caps: [], saltados };
 }
 
 function resumirCapitulos(caps) {
@@ -349,18 +380,25 @@ module.exports = {
       const resultados = await buscarMangas(query);
       if (!resultados.length) {
         return sock.sendMessage(jid, {
-          text: cajaError(`No encontré "${query}" con capítulos en español.\nPrueba con el nombre en inglés o romaji.`, { titulo: 'MANGA', estilo })
+          text: cajaError(`No encontré "${query}" en MangaDex.\nPrueba con el nombre en inglés o romaji, o pega el enlace del manga.`, { titulo: 'MANGA', estilo })
         }, { quoted: msg });
       }
 
-      const manga = resultados[0];
-      const titulo = tituloDe(manga);
-      const caps = await capitulosDe(manga.id);
-      if (!caps.length) {
-        return sock.sendMessage(jid, {
-          text: cajaError(`Encontré *${titulo}*, pero no tiene capítulos en español que se puedan descargar.`, { titulo: 'MANGA', estilo })
-        }, { quoted: msg });
+      const { manga, caps, saltados } = await elegirManga(resultados);
+      if (!manga) {
+        console.log(`[manga] "${query}": ` + saltados.map((x) => `${x.manga.id} (${tituloDe(x.manga)}) externos=${x.externos}`).join(' | '));
+        const lineas = [`Encontré "${query}" en MangaDex, pero ninguno tiene capítulos en español que se puedan descargar:`, ''];
+        saltados.slice(0, 3).forEach((x) => {
+          lineas.push(`▸ *${tituloDe(x.manga)}*: ${x.externos ? `${x.externos} capítulos en español, pero en enlaces externos` : 'sin capítulos en español'}`);
+          lineas.push(`   https://mangadex.org/title/${x.manga.id}`);
+        });
+        if (saltados.some((x) => x.externos)) {
+          lineas.push('', 'Los que están en enlaces externos (ej. MANGA Plus) se leen en esa otra página; MangaDex no los guarda, por eso no los puedo convertir a PDF.');
+        }
+        return sock.sendMessage(jid, { text: caja(lineas, { titulo: 'MANGA', estilo }) }, { quoted: msg });
       }
+      const titulo = tituloDe(manga);
+      const nota = saltados.length ? `ℹ️ *${tituloDe(saltados[0].manga)}* no tiene capítulos en español descargables; uso el siguiente resultado.` : '';
 
       // ---------- ficha ----------
       if (!conCap) {
@@ -380,13 +418,16 @@ module.exports = {
           } catch (_) { /* sin portada, igual se manda la ficha */ }
         }
 
-        const lineas = [`📚 *${titulo}*`, `📌 ${estado}${a.year ? ` · ${a.year}` : ''}`];
+        const lineas = [];
+        if (nota) lineas.push(nota, '');
+        lineas.push(`📚 *${titulo}*`, `📌 ${estado}${a.year ? ` · ${a.year}` : ''}`);
         if (generos.length) lineas.push(`🏷️ ${generos.join(', ')}`);
         if (sinopsis) lineas.push('', `📝 ${sinopsis}`);
         lineas.push('', `📖 Capítulos en español: *${caps.length}*`, `🔢 ${resumirCapitulos(caps)}`);
-        if (resultados.length > 1) {
+        const otros = resultados.filter((r) => r.id !== manga.id).slice(0, 4);
+        if (otros.length) {
           lineas.push('', '🔎 Otros resultados:');
-          resultados.slice(1).forEach((r) => lineas.push(`▸ ${tituloDe(r)}`));
+          otros.forEach((r) => lineas.push(`▸ ${tituloDe(r)}`));
           lineas.push(`(si buscabas otro, escribe su nombre completo)`);
         }
         lineas.push('', `▸ Leer: *${prefix}manga ${titulo} | <capítulo>*`, `▸ Varios: ${prefix}manga ${titulo} | 1-3 (máx. ${MAX_RANGO})`);
@@ -406,7 +447,7 @@ module.exports = {
 
       await sock.sendMessage(jid, {
         text: cargando(
-          `*${titulo}*\nPreparando ${lote.length > 1 ? `capítulos ${lote[0].etiqueta} al ${lote[lote.length - 1].etiqueta}` : `capítulo ${lote[0].etiqueta}`}...\nEsto puede tardar un poco.${aviso}`,
+          `${nota ? nota + '\n' : ''}*${titulo}*\nPreparando ${lote.length > 1 ? `capítulos ${lote[0].etiqueta} al ${lote[lote.length - 1].etiqueta}` : `capítulo ${lote[0].etiqueta}`}...\nEsto puede tardar un poco.${aviso}`,
           { titulo: 'MANGA', estilo }
         )
       }, { quoted: msg });
