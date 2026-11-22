@@ -127,6 +127,18 @@ module.exports = {
       guardarDB(db);
       return responder('🔠 Letras de tu perfil: *' + v + '*. Míralo con ' + prefix + 'perfil');
     }
+    if (opcion === 'fototam' || opcion === 'tamfoto' || opcion === 'tamanofoto') {
+      const v = valor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (quitar.test(v)) {
+        usuario.perfilFotoTam = null;
+        guardarDB(db);
+        return responder('📷 Tamaño de foto restaurado a *grande*.');
+      }
+      if (!['chica', 'grande', 'enorme'].includes(v)) return responder('📷 Elige el tamaño de tu foto: *chica*, *grande* o *enorme*.\nEj: ' + prefix + 'editarperfil fototam enorme');
+      usuario.perfilFotoTam = v;
+      guardarDB(db);
+      return responder('📷 Tamaño de tu foto: *' + v + '*. Míralo con ' + prefix + 'perfil');
+    }
     if (opcion === 'foto' || opcion === 'imagen') {
       if (quitar.test(valor)) {
         try { if (usuario.perfilFoto) fs.unlinkSync(path.join(CARPETA_FOTOS, usuario.perfilFoto)); } catch (_) {}
@@ -161,6 +173,7 @@ module.exports = {
       '• ' + prefix + 'editarperfil nombre <texto>\n   _El nombre que sale en tu tarjeta (máx. 25)_\n' +
       '• ' + prefix + 'editarperfil banner\n   _Envía o responde a una imagen: será el fondo de tu tarjeta. "quitar" la borra_\n' +
       '• ' + prefix + 'editarperfil letras <normal/grande/enorme>\n   _Qué tan grandes se ven las letras de tu tarjeta_\n' +
+      '• ' + prefix + 'editarperfil fototam <chica/grande/enorme>\n   _Qué tan grande se ve tu foto_\n' +
       '• ' + prefix + 'editarperfil marco <forma>\n   _Formas: ' + MARCOS.join(', ') + '_\n' +
       '• ' + prefix + 'editarperfil tema <color>\n   _Colores: ' + Object.keys(TEMAS).join(', ') + '_\n' +
       '• ' + prefix + 'editarperfil titulo <texto>\n   _Un título debajo de tu nombre (máx. 30)_\n' +

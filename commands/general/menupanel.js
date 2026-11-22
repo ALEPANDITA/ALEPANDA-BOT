@@ -6,7 +6,7 @@ const menuMedia = require('../../lib/menumedia');
 const { enviarMenuPanel } = require('../../lib/menu-panel');
 
 // Mismo orden que el .menu normal (los de owner van solo en .menuowner)
-const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'arcade', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
+const ordenCategorias = ['general', 'subbot', 'perfil', 'admin', 'download', 'fun', 'economia', 'casino', 'arcade', 'gacha', 'gacha-anime', 'niveles', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
 
 module.exports = {
   name: 'menupanel',

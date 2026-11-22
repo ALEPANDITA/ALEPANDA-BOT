@@ -1,9 +1,9 @@
-// ELIMINAR (solo owners): BROMA. Cuenta regresiva de 1 minuto editando el mismo mensaje, luego finge que
+// ELIMINAR (admins del grupo y owners): BROMA. Cuenta regresiva de 1 minuto editando el mismo mensaje, luego finge que
 // de 11 a 15 personas salen del grupo, "todos eliminados" y al final finge que el bot tambien se sale.
 // ES TODO FALSO: este comando NO saca a nadie ni el bot sale del grupo (no usa groupParticipantsUpdate ni groupLeave).
 //   .eliminar   (en un grupo)
 const { leerConfig } = require('../../lib/config');
-const { esOwnerBot } = require('../../lib/permisos');
+const { esOwnerBot, esAdminDelGrupo } = require('../../lib/permisos');
 
 const SEGUNDOS = 60;
 const PAUSA_ENTRE_SALIDAS_MS = 2000;
@@ -41,12 +41,19 @@ const pantallaFinal = [
 module.exports = {
   name: 'eliminar',
   aliases: ['eliminargrupo'],
-  category: 'owner',
+  category: 'admin',
   description: 'Broma: cuenta regresiva de 1 minuto y finge que sacan a todos y que el bot se sale. No saca a nadie de verdad.',
   execute: async (sock, jid, msg) => {
     const config = leerConfig();
-    if (!(await esOwnerBot(sock, config, msg))) return; // a los demas no se les responde nada
-    if (!jid.endsWith('@g.us')) return sock.sendMessage(jid, { text: 'Este comando solo se usa en grupos.' }, { quoted: msg });
+    if (!jid.endsWith('@g.us')) { if (await esOwnerBot(sock, config, msg)) return sock.sendMessage(jid, { text: 'Este comando solo se usa en grupos.' }, { quoted: msg }); return; }
+    // PARCHE-ELIMINAR-ADMIN: admins del grupo y owners (a los demas no se les responde nada)
+    let permitido = false;
+    try {
+      const quien = msg.key.participant || msg.key.remoteJid;
+      const { esAdmin } = await esAdminDelGrupo(sock, jid, quien, msg);
+      permitido = !!esAdmin || await esOwnerBot(sock, config, msg);
+    } catch (e) { permitido = false; }
+    if (!permitido) return;
     if (enCurso.has(jid)) return;
     enCurso.add(jid);
     try {

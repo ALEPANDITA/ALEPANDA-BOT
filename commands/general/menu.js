@@ -32,7 +32,7 @@ function obtenerBufferMenu(jid) {
 }
 
 // 'owner' ya no va aqui: los comandos de owner solo salen en .menuowner
-const ordenCategorias = ['general', 'subbot', 'admin', 'download', 'fun', 'economia', 'casino', 'arcade', 'gacha', 'gacha-anime', 'niveles', 'perfil', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
+const ordenCategorias = ['general', 'subbot', 'perfil', 'admin', 'download', 'fun', 'economia', 'casino', 'arcade', 'gacha', 'gacha-anime', 'niveles', 'anime', 'interaction', 'ia', 'tools', 'logo', 'logovideo', 'config', 'nsfw'];
 
 // Cuantos alias numerados (.menu1, .menu2, ...) se registran de entrada.
 const MAX_PAGINAS_ALIAS = 30;

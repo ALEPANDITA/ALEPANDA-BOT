@@ -1,10 +1,24 @@
 const { advertencia, error: cajaError } = require('../../lib/estilo');
+const { esAdminDelGrupo, esOwnerBot } = require('../../lib/permisos');
+const { leerConfig } = require('../../lib/config');
 
 module.exports = {
   name: 'delete',
   category: 'fun2',
   description: 'Aplica el efecto delete de canvas a tu foto o la de un usuario mencionado. Uso: .delete [@usuario]',
   execute: async (sock, jid, msg, { texto, prefix }) => {
+    // PARCHE-DELETE-ADMIN: en grupos solo lo usan admins y owners del bot
+    if (String(jid).endsWith('@g.us')) {
+      let permitido = false;
+      try {
+        const remitente = msg.key.participant || msg.key.remoteJid;
+        const { esAdmin } = await esAdminDelGrupo(sock, jid, remitente, msg);
+        permitido = !!esAdmin || await esOwnerBot(sock, leerConfig(), msg);
+      } catch (e) { permitido = false; }
+      if (!permitido) {
+        return sock.sendMessage(jid, { text: advertencia('Solo los admins del grupo pueden usar este comando.', { titulo: 'SIN PERMISOS' }) }, { quoted: msg });
+      }
+    }
     try {
       // Determinar el jid del objetivo: si hay una mención, usarla; si no, elegir al remitente o random del grupo si es grupo.
       let targetJid = null;

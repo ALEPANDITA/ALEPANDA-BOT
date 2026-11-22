@@ -31,7 +31,7 @@ async function descargarAvatar(sock, id) {
 
 module.exports = {
   name: 'perfil',
-  category: 'general',
+  category: 'perfil',
   description: 'Muestra tu perfil o el de alguien mencionado en una tarjeta (boda, hijos y mas). Personalizalo con .editarperfil',
   execute: async (sock, jid, msg) => {
     const mencionado = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
@@ -87,6 +87,7 @@ module.exports = {
         marco: usuario.perfilMarco || 'circulo',
         banner,
         tamano: usuario.perfilTamano || 'grande',
+        fotoTam: usuario.perfilFotoTam || 'grande',
         saldo: usuario.saldo || 0,
         banco: usuario.banco || 0,
         warns: usuario.warns || 0,

@@ -1,0 +1,140 @@
+// BOMBA (admins del grupo y owners): BROMA. Cuenta regresiva de 60 segundos con una bomba (mecha que se consume,
+// reloj digital y alarma al final), editando el mismo mensaje. Al terminar "explota" y el bot "mata" a de 10 a 15
+// personas al azar, cada una con una muerte distinta, etiquetandolas una por una.
+// ES TODO FALSO: este comando NO saca a nadie del grupo (no usa groupParticipantsUpdate ni groupLeave).
+//   .bomba   (en un grupo)
+const { leerConfig } = require('../../lib/config');
+const { esOwnerBot, esAdminDelGrupo } = require('../../lib/permisos');
+
+const SEGUNDOS = 60;
+const PAUSA_ENTRE_MUERTES_MS = 2500;
+const enCurso = new Set(); // evita lanzarlo dos veces a la vez en el mismo grupo
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+const numeroDe = (id) => String(id || '').split('@')[0].split(':')[0];
+
+// Digitos grandes (doble trazo) para el reloj
+const DIGITOS = ['𝟘', '𝟙', '𝟚', '𝟛', '𝟜', '𝟝', '𝟞', '𝟟', '𝟠', '𝟡'];
+const grande = (n) => String(n).padStart(2, '0').split('').map((d) => DIGITOS[+d]).join('');
+
+function pantallaBomba(seg) {
+  const total = 24;                                   // largo de la mecha
+  const quedan = Math.round((seg / SEGUNDOS) * total);
+  const mecha = '═'.repeat(quedan);
+  const chispa = seg === 0 ? '💥' : (seg % 2 === 0 ? '🔥' : '✨');
+  const urgente = seg <= 10;
+  const luz = urgente ? (seg % 2 === 0 ? '🔴' : '⚫') : '🟠';
+  const aviso = seg === 0 ? '💥 *¡¡BOOOOM!!* 💥'
+    : seg <= 5 ? '🚨 *¡¡¡SE ACABÓ EL TIEMPO!!!* 🚨'
+    : urgente ? '⚠️ *¡CORRAN, VA A EXPLOTAR!* ⚠️'
+    : seg <= 30 ? '😰 _La mecha se acorta..._'
+    : '😈 _Alguien puso una bomba en el grupo..._';
+  return [
+    `${luz}━━━━━━━━━━━━━━━━━━━━${luz}`,
+    '      💣  *BOMBA ACTIVADA*  💣',
+    `${luz}━━━━━━━━━━━━━━━━━━━━${luz}`,
+    '',
+    '      ┏━━━━━━━━━━━━━━┓',
+    `      ┃  ⏱  〔 ${grande(0)} : ${grande(seg)} 〕  ┃`,
+    '      ┗━━━━━━━━━━━━━━┛',
+    '',
+    `🧨${mecha}${chispa}`,
+    '',
+    aviso
+  ].join('\n');
+}
+
+// Muertes (broma): {v} = la victima. Todas distintas entre si.
+const MUERTES = [
+  'El bot mató a {v} 💀',
+  'El bot golpeó a {v} hasta la muerte 🥊',
+  'El bot aplastó a {v} con un yunque de dibujos animados 🔨',
+  'El bot le lanzó un chanclazo certero a {v}. Murió en el acto 🩴',
+  'El bot mandó a volar a {v} directo a la luna 🚀',
+  'El bot le puso un piano encima a {v} 🎹',
+  'El bot convirtió a {v} en tamal 🫔',
+  'El bot atrapó a {v} y lo dejó sin wifi para siempre 📵',
+  'El bot venció a {v} en un duelo de pandas 🐼⚔️',
+  'El bot le cayó encima a {v} con todo su peso 🐼',
+  'El bot le dio un zape ninja a {v} 🥷',
+  'El bot hizo explotar a {v} con un petardo 🧨',
+  'El bot mandó a {v} a la dimensión desconocida 🌀',
+  'El bot le echó a {v} un balde de agua helada. No sobrevivió 🧊',
+  'El bot atropelló a {v} con un carrito de supermercado 🛒',
+  'El bot dejó a {v} sin batería y sin vida 🪫',
+  'El bot lo pensó dos veces y aun así acabó con {v} 😈',
+  'El bot lanzó a {v} a un pozo de bambú 🎋',
+  'El bot le gritó a {v} tan fuerte que se desmayó para siempre 📢',
+  'El bot hizo a {v} desaparecer con un chasquido 🫰',
+  'El bot noqueó a {v} con una almohada gigante 🛏️',
+  'El bot le dio un golpe crítico a {v}. ¡Fue súper efectivo! ⚡',
+  'El bot terminó con {v} de un solo golpe 👊',
+  'El bot encerró a {v} en una cápsula de mil lunes 📅',
+  'El bot mandó a {v} al mundo de los memes 🤡'
+];
+
+const barajar = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+
+module.exports = {
+  name: 'bomba',
+  aliases: ['bombagrupo'],
+  category: 'admin',
+  description: 'Broma: bomba con cuenta regresiva de 1 minuto; al explotar el bot "mata" a 10-15 personas con muertes distintas. Nadie sale de verdad.',
+  groupOnly: true,
+  execute: async (sock, jid, msg) => {
+    const config = leerConfig();
+    if (!jid.endsWith('@g.us')) return;
+    // Solo admins del grupo y owners (a los demas no se les responde nada)
+    let permitido = false;
+    try {
+      const quien = msg.key.participant || msg.key.remoteJid;
+      const { esAdmin } = await esAdminDelGrupo(sock, jid, quien, msg);
+      permitido = !!esAdmin || await esOwnerBot(sock, config, msg);
+    } catch (e) { permitido = false; }
+    if (!permitido) return;
+    if (enCurso.has(jid)) return;
+    enCurso.add(jid);
+    try {
+      const metadata = await sock.groupMetadata(jid);
+      const remitente = msg.key.participant || msg.key.remoteJid;
+      const idsDelBot = [sock.user && sock.user.id, sock.user && sock.user.lid].filter(Boolean);
+      const esElBot = (p) => idsDelBot.some((b) => [p.id, p.lid].some((x) => numeroDe(x) === numeroDe(b)));
+      const esQuienLoLanzo = (p) => [p.id, p.lid, p.phoneNumber].some((x) => numeroDe(x) === numeroDe(remitente));
+
+      // Victimas: de 10 a 15 al azar (sin el bot ni quien lanzo la bomba; si el grupo es mas chico, todos los que haya)
+      const candidatos = barajar(metadata.participants.filter((p) => !esElBot(p) && !esQuienLoLanzo(p)));
+      const cuantos = Math.min(candidatos.length, 10 + Math.floor(Math.random() * 6));
+      const victimas = candidatos.slice(0, cuantos);
+      const muertes = barajar([...MUERTES]);
+
+      // Cuenta regresiva: se edita el mismo mensaje cada segundo (si no se puede editar, se borra y se manda de nuevo)
+      let enviado = await sock.sendMessage(jid, { text: pantallaBomba(SEGUNDOS) });
+      const inicio = Date.now();
+      for (let seg = SEGUNDOS - 1; seg >= 0; seg--) {
+        await espera(Math.max(0, inicio + (SEGUNDOS - seg) * 1000 - Date.now()));
+        const texto = pantallaBomba(seg);
+        try {
+          await sock.sendMessage(jid, { text: texto, edit: enviado.key });
+        } catch (_) {
+          try { await sock.sendMessage(jid, { delete: enviado.key }); } catch (__) { /* nada */ }
+          enviado = await sock.sendMessage(jid, { text: texto });
+        }
+      }
+
+      // Las "muertes" (solo mensajes de texto con etiqueta, nadie sale de verdad)
+      await espera(1500);
+      await sock.sendMessage(jid, { text: '💥💥💥 *¡LA BOMBA EXPLOTÓ!* 💥💥💥\n\n😈 _El bot se pone en modo asesino..._' });
+      for (let i = 0; i < victimas.length; i++) {
+        await espera(PAUSA_ENTRE_MUERTES_MS);
+        const p = victimas[i];
+        const frase = muertes[i % muertes.length].replace('{v}', `@${numeroDe(p.id)}`);
+        await sock.sendMessage(jid, { text: `☠️ ${frase}`, mentions: [p.id] });
+      }
+      await espera(PAUSA_ENTRE_MUERTES_MS);
+      await sock.sendMessage(jid, { text: `🪦 *Bajas de la bomba: ${victimas.length}*\n\n🐼💀 _Todos fueron matados por el panda..._` });
+    } catch (err) {
+      console.error('[bomba]', err);
+    } finally {
+      enCurso.delete(jid);
+    }
+  }
+};
