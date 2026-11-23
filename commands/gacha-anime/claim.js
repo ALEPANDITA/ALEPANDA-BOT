@@ -57,6 +57,9 @@ module.exports = {
     const clave = pendiente.nombre;
     perfil.gachaAnime[clave] = (perfil.gachaAnime[clave] || 0) + 1;
     const copias = perfil.gachaAnime[clave];
+    if (!perfil.imagenesAnime) perfil.imagenesAnime = {};
+    if (!perfil.imagenesAnime[clave]) perfil.imagenesAnime[clave] = [];
+    if (pendiente.imagen) perfil.imagenesAnime[clave].push(pendiente.imagen);
     if (pendiente.imagen) { if (!perfil.gachaAnimeFotos) perfil.gachaAnimeFotos = {}; perfil.gachaAnimeFotos[clave] = pendiente.imagen; }
 
     delete perfil.pendingGachaAnime;

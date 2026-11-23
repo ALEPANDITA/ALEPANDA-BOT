@@ -9,7 +9,8 @@ module.exports = {
   aliases: ['map', 'mispropiedades', 'imperio'],
   category: 'economia',
   description: 'Mapa con todas tus propiedades: cuánto ganan por hora y cuánto juntan en 24 h',
-  execute: async (sock, jid, msg, { prefix = '.' } = {}) => {
+  execute: async (sock, jid, msg, { prefix = '.', texto = '' } = {}) => {
+    const pedida = parseInt(String(texto || '').trim().split(/\s+/).slice(1).find((x) => /^\d{1,3}$/.test(x)), 10) || 1;
     const estilo = porCategoria('economia');
     const remitente = msg.key.participant || msg.key.remoteJid;
     { const db0 = leerDB(); if (S.resolver(db0)) guardarDB(db0); }
@@ -34,12 +35,13 @@ module.exports = {
 
     try {
       const { crearMapa } = require('../../lib/mapacard');
-      const png = crearMapa({
+      const mapa = crearMapa({
+        pagina: pedida,
         nombre, categorias: N.CATEGORIAS, porHora: r.porHora, en24: r.en24, porCobrar: r.porCobrar, cantidad: r.cantidad, total: r.total,
         bonos: r.bonos, compartido: r.inv.compartido, nombrePareja,
-        items: r.inv.items.map((e) => ({ nombre: e.nombre, cat: e.n.cat, nivel: e.nivel, maxNivel: e.n.maxNivel, hora: e.hora, bono: e.bono, exclusiva: e.n.tipo === 'exclusiva', deMiPareja: !e.mio }))
+        items: r.inv.items.map((e) => ({ id: e.n.id, nombre: e.nombre, cat: e.n.cat, nivel: e.nivel, maxNivel: e.n.maxNivel, hora: e.hora, bono: e.bono, exclusiva: e.n.tipo === 'exclusiva', deMiPareja: !e.mio }))
       });
-      return await sock.sendMessage(jid, { image: png, caption: `🗺️ *Mapa de propiedades*\n\n${resumenTexto.join('\n')}` }, { quoted: msg });
+      return await sock.sendMessage(jid, { image: mapa.buffer, caption: `🗺️ *Mapa de tu ciudad*${mapa.paginas > 1 ? ` — página ${mapa.pagina}/${mapa.paginas} (usa *${prefix}mapa ${mapa.pagina < mapa.paginas ? mapa.pagina + 1 : 1}*)` : ''}\n\n${resumenTexto.join('\n')}` }, { quoted: msg });
     } catch (e) {
       console.error('[mapa] no se pudo dibujar:', e && e.message ? e.message : e);
       const lineas = [...resumenTexto, ''];
