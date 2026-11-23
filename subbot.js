@@ -256,7 +256,9 @@ async function iniciarSubbot() {
     ).trim();
 
     const config = leerConfigSubbot();
-    const prefix = config.prefix || '.';
+    let prefix = config.prefix || '.';
+    // PARCHE-MULTIPREFIX: cualquier prefijo (. / ! # ...) funciona siempre
+    try { prefix = require('./lib/multiprefix').detectar(texto, prefix, comandos, normalizarComando) || prefix; } catch (e) { /* prefijo normal */ }
 
     // En un subbot, el owner vincula su PROPIO numero, asi que sus comandos
     // llegan marcados como "fromMe". Ya no descartamos esos mensajes por

@@ -449,7 +449,8 @@ async function startBot() {
     try {
       if (esGrupo && require('./lib/apagados').estaApagado(jid)) {
         const dbApagado = leerDB();
-        const prefixApagado = getGrupo(dbApagado, jid).prefix || config.prefix || '.';
+        let prefixApagado = getGrupo(dbApagado, jid).prefix || config.prefix || '.';
+        try { prefixApagado = require('./lib/multiprefix').detectar(texto, prefixApagado, comandos, normalizarComando) || prefixApagado; } catch (e) { /* prefijo normal */ } // PARCHE-MULTIPREFIX
         if (texto.startsWith(prefixApagado)) {
           const cmdApagado = comandos.get(normalizarComando(texto.slice(prefixApagado.length).trim().split(/\s+/)[0]));
           if (cmdApagado && cmdApagado.permiteApagado && await esOwnerBot(sock, config, msg)) {
@@ -514,6 +515,12 @@ async function startBot() {
       const grupo = getGrupo(db, jid);
       if (grupo.prefix) prefix = grupo.prefix;
     }
+    // PARCHE-MULTIPREFIX: cualquier prefijo (. / ! # ...) funciona siempre, en todos los grupos
+    try {
+      // PARCHE-UNICO: en un grupo con "un solo prefijo" (.setprefix ! solo) solo vale ese; .setprefix siempre funciona con cualquiera para poder cambiarlo
+      const soloUno = esGrupo && !!getGrupo(leerDB(), jid).prefixSolo;
+      prefix = require('./lib/multiprefix').detectar(texto, prefix, comandos, normalizarComando, soloUno ? ['setprefix'] : null) || prefix;
+    } catch (e) { /* prefijo normal */ }
 
     const { propuestasPorMensaje, limpiarExpiradas } = require('./lib/matrimonio');
     limpiarExpiradas();
@@ -662,7 +669,8 @@ async function startBot() {
         let dejarPasar = false;
         try { dejarPasar = await require('./lib/permisos').esSuperOwnerBot(sock, msg); } catch (_) { dejarPasar = false; }
         // Un muteado todavia puede escribir .unmuteall (solo lo ejecuta si es admin u owner)
-        const prefijoMute = grupo.prefix || config.prefix || '.';
+        let prefijoMute = grupo.prefix || config.prefix || '.';
+        try { prefijoMute = require('./lib/multiprefix').detectar(texto, prefijoMute, comandos, normalizarComando) || prefijoMute; } catch (e) { /* prefijo normal */ } // PARCHE-MULTIPREFIX
         if (!dejarPasar && texto.startsWith(prefijoMute)) {
           const cmdMute = comandos.get(normalizarComando(texto.slice(prefijoMute.length).trim().split(/\s+/)[0]));
           dejarPasar = !!(cmdMute && cmdMute.permiteMuteado);
