@@ -1,5 +1,7 @@
 const { leerDB, getUsuario, claveCanonica } = require('../../lib/db');
 const { formatearCumple, edadDe } = require('../../lib/cumple');
+const TP = require('../../lib/tiendaperfil');
+const { bloqueAccesorios } = require('../../lib/tiendaperfil'); // PARCHE-ACCESORIOS
 
 const TEMAS = { rosa: '🌸', azul: '💙', morado: '💜', verde: '💚', rojo: '❤️', dorado: '✨', negro: '🖤', naranja: '🧡', amarillo: '💛' };
 const num = (j) => String(j || '').split('@')[0].split(':')[0];
@@ -110,7 +112,8 @@ module.exports = {
       }
       const png = await crearPerfil({
         nombre: usuario.perfilNombre || nombreDe(objetivo),
-        titulo: usuario.perfilTitulo || '',
+        titulo: TP.tituloDe(usuario) || usuario.perfilTitulo || '',
+        accesorios: TP.visiblesDe(usuario).slice(0, TP.MAX_PUESTOS).map((x) => x.id),
         desc: usuario.descripcion || '',
         genero,
         cumple,
@@ -129,7 +132,7 @@ module.exports = {
         hijos: hijos.map(nombreDe),
         padres: padres.map(nombreDe)
       });
-      return await sock.sendMessage(jid, { image: png, caption: `${usuario.perfilEmoji || TEMAS[tema]} Perfil de ${tag(objetivo)}`, mentions: [objetivo] }, { quoted: msg });
+      return await sock.sendMessage(jid, { image: png, caption: `${usuario.perfilEmoji || TEMAS[tema]} Perfil de ${tag(objetivo)}${bloqueAccesorios(usuario)}`, mentions: [objetivo] }, { quoted: msg });
     } catch (err) {
       console.error('[perfil] No pude dibujar la tarjeta, mando texto:', err && err.message ? err.message : err);
     }
@@ -150,8 +153,10 @@ module.exports = {
     if (hijos.length) { menciones.push(...hijos); familia += `👶 Hijos (${hijos.length}): ${hijos.map(tag).join(', ')}\n`; }
     if (padres.length) { menciones.push(...padres); familia += `👪 Padres: ${padres.map(tag).join(' y ')}\n`; }
     await sock.sendMessage(jid, {
-      text: `${usuario.perfilEmoji || TEMAS[tema]} *PERFIL* ${usuario.perfilEmoji || TEMAS[tema]}\n\nUsuario: ${tag(objetivo)}\n${extras}\n${familia}\n💰 Saldo: ${usuario.saldo || 0}\n🏦 Banco: $${usuario.banco || 0}\n⚠️ Warns: ${usuario.warns || 0}`,
+      text: `${usuario.perfilEmoji || TEMAS[tema]} *PERFIL* ${usuario.perfilEmoji || TEMAS[tema]}\n\nUsuario: ${tag(objetivo)}\n${extras}\n${familia}\n💰 Saldo: ${usuario.saldo || 0}\n🏦 Banco: $${usuario.banco || 0}\n⚠️ Warns: ${usuario.warns || 0}${bloqueAccesorios(usuario)}`,
       mentions: [...new Set(menciones)]
     });
   }
 };
+
+// ACCESORIOS-FOTO

@@ -35,11 +35,14 @@ module.exports = {
       });
     }
 
-    await sock.sendMessage(jid, { text: `🔎 Buscando *${query}*...` });
+    const T = { ini: Date.now() }; // PARCHE-PLAY-TIEMPOS
+    // El aviso de "Buscando" ya no frena la busqueda: salen al mismo tiempo (la ficha espera a que el aviso haya salido)
+    const buscandoP = sock.sendMessage(jid, { text: `🔎 Buscando *${query}*...` }).catch(() => {});
 
     let video;
     try {
       video = await buscarYoutube(query);
+      T.busca = Date.now();
     } catch (err) {
       console.error(err);
       const textoError = err.code === 'NO_API_KEY'
@@ -64,6 +67,7 @@ module.exports = {
     // La ficha sale como GIF animado (marco de reproductor con la portada adentro, lib/playgif.js).
     // Si falta el marco (assets/play) o algo falla, sale la imagen de siempre, y si eso falla, solo el texto.
     const fichaP = (async () => {
+      await buscandoP;
       const gif = video.thumbnail
         ? await crearGifPlay({ portada: video.thumbnail, clave: ytd.idDeUrl(video.url) || video.url }).catch(() => null)
         : null;
@@ -74,6 +78,7 @@ module.exports = {
       return sock.sendMessage(jid, { image: { url: video.thumbnail }, caption: ficha });
     })().catch(() => sock.sendMessage(jid, { text: ficha }));
     fichaP.catch(() => {}); // evita "unhandled rejection" si falla mientras se descarga
+    fichaP.then(() => { T.ficha = Date.now(); }, () => {});
     const esperarFicha = () => fichaP.catch((e) => console.error('[play] no se pudo mandar la ficha:', e.message));
 
     const idVideo = ytd.idDeUrl(video.url);
@@ -88,11 +93,14 @@ module.exports = {
         if (await waCache.reenviar(sock, jid, idVideo)) return;
       }
 
+      T.datosIni = Date.now();
       const datosP = obtenerDatosDescarga(endpoint, video.url);
       datosP.catch(() => {});
+      datosP.then(() => { T.datos = Date.now(); }, () => {});
       await esperarFicha();
       const datos = await datosP;
       tempPath = await descargarArchivo(datos.remoteUrl, quiereVideo ? 'mp4' : 'mp3');
+      T.listo = Date.now();
 
       const titulo = datos.title || video.title;
       const buffer = fs.readFileSync(tempPath);
@@ -121,6 +129,10 @@ module.exports = {
         : `No se pudo descargar: ${err.message}`;
       await sock.sendMessage(jid, { text: textoError });
     } finally {
+      try {
+        const seg = (a, b) => (a && b ? ((b - a) / 1000).toFixed(1) + 's' : '-');
+        console.log(`[play] tiempos -> buscar ${seg(T.ini, T.busca)} | gif+envio ficha ${seg(T.busca, T.ficha)} | descarga yt-dlp ${seg(T.datosIni, T.datos)} | subir audio ${seg(T.listo, Date.now())} | TOTAL ${seg(T.ini, Date.now())}`);
+      } catch (_) { /* solo diagnostico */ }
       if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     }
   }

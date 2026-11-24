@@ -223,6 +223,9 @@ async function startBot() {
       // .time: avisa por privado cuando se acaba el tiempo del bot en un grupo
       try { require('./lib/tiempo-grupos').iniciarVigilanteTiempos(sock); } catch (err) { console.error('[time] No pude iniciar el vigilante:', err.message); }
 
+      // Préstamos del banco: avisos, prórrogas y embargos // PARCHE-VIGILA-PRESTAMOS
+      try { require('./lib/eco-prestamos').vigilar(sock); } catch (err) { console.error('[prestamos] No pude iniciar el vigilante:', err.message); }
+
       // .cerrar <tiempo>: abre solo los grupos cuyo cierre ya vencio
       try { require('./lib/cierre-grupos').iniciarVigilanteCierres(sock); } catch (err) { console.error('[cerrar] No pude iniciar el vigilante:', err.message); }
 

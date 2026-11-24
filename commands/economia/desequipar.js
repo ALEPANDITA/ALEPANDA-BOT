@@ -1,5 +1,6 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
 const T = require('../../lib/tiendaperfil');
+const { llaveRemitente } = require('../../lib/economiaid');
 
 module.exports = {
   name: 'desequipar',
@@ -10,7 +11,7 @@ module.exports = {
     const remitente = msg.key.participant || msg.key.remoteJid;
     const consulta = T.argumentosDe(texto, prefix);
     const db = leerDB();
-    const usuario = T.datosAccesorios(getUsuario(db, remitente));
+    const usuario = T.datosAccesorios(getUsuario(db, await llaveRemitente(sock, jid, db, msg)));
 
     if (!consulta) {
       return sock.sendMessage(jid, { text: `Uso: *${prefix}desequipar <espacio, numero o nombre>*\nEspacios: ${T.SLOTS.map(s => s.id).join(', ')}` }, { quoted: msg });
@@ -36,3 +37,5 @@ module.exports = {
     await sock.sendMessage(jid, { text: `👋 Te quitaste ${puesto.emoji} *${puesto.nombre}*. Sigue en tu inventario y puedes ponertelo otra vez con *${prefix}equipar*.` }, { quoted: msg });
   }
 };
+
+// ACCESORIOS-FOTO

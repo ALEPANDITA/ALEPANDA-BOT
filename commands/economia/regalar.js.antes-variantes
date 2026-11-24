@@ -1,0 +1,84 @@
+const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const T = require('../../lib/tiendaperfil');
+const { REACCIONES, EFECTOS, nivelDe } = require('../../lib/regalosdata');
+const { reproducir, ocupar, liberar } = require('../../lib/cuadros');
+const { crearCuadros, PAUSA } = require('../../lib/regaloanim');
+
+const elegir = (lista) => lista[Math.floor(Math.random() * lista.length)];
+const llenar = (t, de, para) => String(t).split('{de}').join(de).split('{para}').join(para);
+
+module.exports = {
+  name: 'regalar',
+  aliases: ['regalo'],
+  category: 'economia',
+  description: 'Manda un regalo animado a tu pareja (el bot la etiqueta y va editando el mensaje). Ej: .regalar 5  o  .regalar rosa',
+  groupOnly: true,
+  execute: async (sock, jid, msg, { texto, prefix }) => {
+    const remitente = msg.key.participant || msg.key.remoteJid;
+    const consulta = T.argumentosDe(texto, prefix);
+
+    const db = leerDB();
+    const usuario = getUsuario(db, remitente);
+
+    if (!usuario.pareja) {
+      return sock.sendMessage(jid, { text: `💍 Necesitas estar casado/a para mandar regalos a tu pareja.\nUsa *${prefix}casar @persona* para proponer matrimonio.` }, { quoted: msg });
+    }
+
+    if (!consulta) {
+      return sock.sendMessage(jid, { text: `🎁 Dime cual regalo quieres mandar.\nMira la lista con *${prefix}regalos* y usa *${prefix}regalar <numero o nombre>*.` }, { quoted: msg });
+    }
+
+    const r = T.buscar(T.REGALOS, consulta);
+    if (r.error === 'varios') {
+      return sock.sendMessage(jid, { text: `🤔 Encontre varios:\n${r.opciones.map(o => `• ${o.nombre} (${prefix}regalar ${T.REGALOS.indexOf(o) + 1})`).join('\n')}\n\nUsa el numero para elegir uno.` }, { quoted: msg });
+    }
+    if (r.error) {
+      return sock.sendMessage(jid, { text: `❌ No encontre ese regalo. Mira la lista con *${prefix}regalos*.` }, { quoted: msg });
+    }
+    const regalo = r.item;
+
+    if (!ocupar(remitente)) {
+      return sock.sendMessage(jid, { text: '⏳ Espera a que termine tu regalo anterior.' }, { quoted: msg });
+    }
+    let cobrado = false;
+    try {
+      if (!T.cobrar(usuario, regalo.precio)) {
+        const falta = regalo.precio - (usuario.saldo || 0);
+        return await sock.sendMessage(jid, {
+          text: `💸 *${regalo.nombre}* cuesta ${T.dinero(regalo.precio)} y en mano tienes ${T.dinero(usuario.saldo)}.\nTe faltan ${T.dinero(falta)}. (Puedes sacar del banco con *${prefix}banco sacar <monto>*)`
+        }, { quoted: msg });
+      }
+      guardarDB(db);
+      cobrado = true;
+
+      const pareja = usuario.pareja;
+      const de = `@${remitente.split('@')[0]}`;
+      const para = `@${pareja.split('@')[0]}`;
+      const nivel = nivelDe(regalo.precio);
+
+      try { await sock.sendMessage(jid, { react: { text: regalo.emoji, key: msg.key } }); } catch (e) { /* no critico */ }
+
+      const cuadros = crearCuadros({
+        regalo, nivel, de, para,
+        frase: llenar(regalo.frase, de, para),
+        reaccion: llenar(elegir(REACCIONES[nivel]), de, para),
+        efecto: EFECTOS[nivel],
+        costo: T.dinero(regalo.precio)
+      });
+      await reproducir(sock, jid, cuadros, { quoted: msg, pausaMs: PAUSA[nivel], mentions: [remitente, pareja] });
+      cobrado = false;
+    } catch (err) {
+      console.error('[regalar] fallo el envio:', err);
+      if (cobrado) {
+        try {
+          const dbRef = leerDB();
+          getUsuario(dbRef, remitente).saldo += regalo.precio;
+          guardarDB(dbRef);
+          await sock.sendMessage(jid, { text: '😵 No pude enviar el regalo, te devolvi tu dinero. Intenta otra vez.' }, { quoted: msg });
+        } catch (_) { /* sin conexión */ }
+      }
+    } finally {
+      liberar(remitente);
+    }
+  }
+};

@@ -1,5 +1,6 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
 const T = require('../../lib/tiendaperfil');
+const { llaveRemitente } = require('../../lib/economiaid');
 
 module.exports = {
   name: 'equipar',
@@ -10,7 +11,7 @@ module.exports = {
     const remitente = msg.key.participant || msg.key.remoteJid;
     const consulta = T.argumentosDe(texto, prefix);
     const db = leerDB();
-    const usuario = T.datosAccesorios(getUsuario(db, remitente));
+    const usuario = T.datosAccesorios(getUsuario(db, await llaveRemitente(sock, jid, db, msg)));
 
     if (!consulta) {
       return sock.sendMessage(jid, { text: `Uso: *${prefix}equipar <numero o nombre>*\nMira los tuyos con *${prefix}accesorios mis*.` }, { quoted: msg });
@@ -32,11 +33,20 @@ module.exports = {
     }
 
     const anterior = T.accesorioPorId(usuario.accEquipados[acc.slot]);
+    // Maximo 3 accesorios dibujados en la foto a la vez (el titulo no cuenta). Cambiar el de un espacio ocupado si se puede.
+    if (acc.slot !== 'titulo' && !anterior) {
+      const puestos = T.visiblesDe(usuario);
+      if (puestos.length >= T.MAX_PUESTOS) {
+        return sock.sendMessage(jid, { text: `✋ Ya llevas ${T.MAX_PUESTOS} accesorios puestos:\n${puestos.map(a => `• ${a.emoji} ${a.nombre}`).join('\n')}\n\nQuita uno con *${prefix}desequipar <nombre o espacio>* y luego ponte *${acc.nombre}*.` }, { quoted: msg });
+      }
+    }
     usuario.accEquipados[acc.slot] = acc.id;
     guardarDB(db);
 
     await sock.sendMessage(jid, {
-      text: `✨ Te pusiste ${acc.emoji} *${acc.nombre}* en ${slot.etiqueta}.${anterior ? `\n(Te quitaste ${anterior.emoji} ${anterior.nombre}, sigue en tu inventario.)` : ''}\nMira como luce en *${prefix}perfil*.`
+      text: `✨ Te pusiste ${acc.emoji} *${acc.nombre}* en ${slot.etiqueta}.${anterior ? `\n(Te quitaste ${anterior.emoji} ${anterior.nombre}, sigue en tu inventario.)` : ''}\nMira como luce en tu foto con *${prefix}perfil* (llevas ${T.visiblesDe(usuario).length}/${T.MAX_PUESTOS}).`
     }, { quoted: msg });
   }
 };
+
+// ACCESORIOS-FOTO

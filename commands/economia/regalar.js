@@ -1,15 +1,32 @@
 const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
 const T = require('../../lib/tiendaperfil');
 const { REACCIONES, EFECTOS, nivelDe } = require('../../lib/regalosdata');
+const { reproducir, ocupar, liberar } = require('../../lib/cuadros');
+const { crearCuadros, PAUSA } = require('../../lib/regaloanim');
+const V = require('../../lib/regalosvariantes');
 
-const elegir = (lista) => lista[Math.floor(Math.random() * lista.length)];
+// Escoge un texto que esta persona NO haya visto todavía (guarda lo ya visto en su ficha). Al agotarlos, reinicia sin repetir el último.
+function elegirNuevo(usuario, grupo, clave, lista) {
+  if (!usuario.regaloHist || typeof usuario.regaloHist !== 'object') usuario.regaloHist = {};
+  const h = usuario.regaloHist[grupo] = usuario.regaloHist[grupo] || {};
+  let usados = Array.isArray(h[clave]) ? h[clave].filter((i) => i >= 0 && i < lista.length) : [];
+  let libres = lista.map((_, i) => i).filter((i) => !usados.includes(i));
+  if (!libres.length) {
+    const ultimo = usados[usados.length - 1];
+    usados = [];
+    libres = lista.map((_, i) => i).filter((i) => i !== ultimo || lista.length === 1);
+  }
+  const idx = libres[Math.floor(Math.random() * libres.length)];
+  h[clave] = [...usados, idx];
+  return lista[idx];
+}
 const llenar = (t, de, para) => String(t).split('{de}').join(de).split('{para}').join(para);
 
 module.exports = {
   name: 'regalar',
   aliases: ['regalo'],
   category: 'economia',
-  description: 'Manda un regalo a tu pareja (el bot la etiqueta). Ej: .regalar 5  o  .regalar rosa',
+  description: 'Manda un regalo animado a tu pareja (el bot la etiqueta y va editando el mensaje). Ej: .regalar 5  o  .regalar rosa',
   groupOnly: true,
   execute: async (sock, jid, msg, { texto, prefix }) => {
     const remitente = msg.key.participant || msg.key.remoteJid;
@@ -35,51 +52,57 @@ module.exports = {
     }
     const regalo = r.item;
 
-    if (!T.cobrar(usuario, regalo.precio)) {
-      const falta = regalo.precio - (usuario.saldo || 0);
-      return sock.sendMessage(jid, {
-        text: `💸 *${regalo.nombre}* cuesta ${T.dinero(regalo.precio)} y en mano tienes ${T.dinero(usuario.saldo)}.\nTe faltan ${T.dinero(falta)}. (Puedes sacar del banco con *${prefix}banco sacar <monto>*)`
-      }, { quoted: msg });
+    // una sola escena a la vez por persona (así no se encimen dos regalos)
+    if (!ocupar(remitente)) {
+      return sock.sendMessage(jid, { text: '⏳ Espera a que termine tu regalo anterior.' }, { quoted: msg });
     }
-    guardarDB(db);
-
-    const pareja = usuario.pareja;
-    const de = `@${remitente.split('@')[0]}`;
-    const para = `@${pareja.split('@')[0]}`;
-    const nivel = nivelDe(regalo.precio);
-
+    let cobrado = false;
     try {
+      if (!T.cobrar(usuario, regalo.precio)) {
+        const falta = regalo.precio - (usuario.saldo || 0);
+        return await sock.sendMessage(jid, {
+          text: `💸 *${regalo.nombre}* cuesta ${T.dinero(regalo.precio)} y en mano tienes ${T.dinero(usuario.saldo)}.\nTe faltan ${T.dinero(falta)}. (Puedes sacar del banco con *${prefix}banco sacar <monto>*)`
+        }, { quoted: msg });
+      }
+      const nivel = nivelDe(regalo.precio);
+      // textos que esta persona no haya visto con este regalo (frase, reacción y título de la escena)
+      const fraseElegida = elegirNuevo(usuario, 'frase', regalo.id, [regalo.frase, ...(V.FRASES[regalo.id] || [])]);
+      const reaccionElegida = elegirNuevo(usuario, 'reaccion', nivel, [...REACCIONES[nivel], ...V.REACCIONES_EXTRA[nivel]]);
+      const encabezadoElegido = elegirNuevo(usuario, 'encabezado', nivel, V.ENCABEZADOS[nivel]);
+      const prepElegida = elegirNuevo(usuario, 'prep', 'general', V.PREPARACION);
+      guardarDB(db);
+      cobrado = true;
+
+      const pareja = usuario.pareja;
+      const de = `@${remitente.split('@')[0]}`;
+      const para = `@${pareja.split('@')[0]}`;
+
       try { await sock.sendMessage(jid, { react: { text: regalo.emoji, key: msg.key } }); } catch (e) { /* no critico */ }
 
-      await sock.sendMessage(jid, {
-        text: `🎁 ${de} esta preparando una sorpresa muy especial${nivel === 'legendario' ? '... algo que nadie habia visto jamas' : ''}... ✨`,
-        mentions: [remitente]
-      }, { quoted: msg });
-
-      await T.esperar(nivel === 'legendario' ? 2500 : 1500);
-
-      const reaccion = llenar(elegir(REACCIONES[nivel]), de, para);
-      const adorno = regalo.emoji + ' ';
-      const textoFinal =
-        `${EFECTOS[nivel]}\n\n` +
-        `💝 *¡REGALO DE AMOR!* 💝\n\n` +
-        `${de} le manda a ${para}:\n` +
-        `${adorno.repeat(3).trim()}\n` +
-        `*${regalo.nombre.toUpperCase()}*\n` +
-        `${adorno.repeat(3).trim()}\n\n` +
-        `_${llenar(regalo.frase, de, para)}_\n\n` +
-        `${reaccion}\n\n` +
-        `${EFECTOS[nivel]}\n` +
-        `💸 Costo: ${T.dinero(regalo.precio)}`;
-
-      await sock.sendMessage(jid, { text: textoFinal, mentions: [remitente, pareja] }, { quoted: msg });
+      const cuadros = crearCuadros({
+        regalo, nivel, de, para,
+        frase: llenar(fraseElegida, de, para),
+        reaccion: llenar(reaccionElegida, de, para),
+        encabezado: encabezadoElegido,
+        preparacion: prepElegida,
+        efecto: EFECTOS[nivel],
+        costo: T.dinero(regalo.precio)
+      });
+      await reproducir(sock, jid, cuadros, { quoted: msg, pausaMs: PAUSA[nivel], mentions: [remitente, pareja] });
+      cobrado = false; // ya se entregó
     } catch (err) {
-      // Si no se pudo enviar el regalo, se devuelve el dinero para que no se pierda.
-      console.error('[regalar] fallo el envio, se devuelve el dinero:', err);
-      const dbRef = leerDB();
-      getUsuario(dbRef, remitente).saldo += regalo.precio;
-      guardarDB(dbRef);
-      await sock.sendMessage(jid, { text: '😵 No pude enviar el regalo, te devolvi tu dinero. Intenta otra vez.' }, { quoted: msg }).catch(() => {});
+      console.error('[regalar] fallo el envio:', err);
+      if (cobrado) {
+        // Si no se pudo enviar el regalo, se devuelve el dinero para que no se pierda.
+        try {
+          const dbRef = leerDB();
+          getUsuario(dbRef, remitente).saldo += regalo.precio;
+          guardarDB(dbRef);
+          await sock.sendMessage(jid, { text: '😵 No pude enviar el regalo, te devolvi tu dinero. Intenta otra vez.' }, { quoted: msg });
+        } catch (_) { /* sin conexión */ }
+      }
+    } finally {
+      liberar(remitente);
     }
   }
 };

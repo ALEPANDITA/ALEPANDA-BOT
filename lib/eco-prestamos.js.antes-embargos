@@ -1,0 +1,134 @@
+const N = require('./eco-negocios');
+
+const HORAS_PLAZO = 72;
+const FACTOR_ACTIVOS = 0.25;
+const HORAS_INGRESO = 6;
+const BASE = 2000;
+const MORA_DIA = 0.05;
+const MORA_MAX = 0.5;
+const PLANES = [
+  { id: 1, nombre: 'Básico', parte: 0.25, interes: 0.06, icono: '🥉' },
+  { id: 2, nombre: 'Plus', parte: 0.5, interes: 0.08, icono: '🥈' },
+  { id: 3, nombre: 'Premium', parte: 1, interes: 0.10, icono: '🥇' }
+];
+
+const redondear = (n) => (n >= 1e4 ? Math.floor(n / 1000) * 1000 : Math.floor(n / 100) * 100);
+
+function activos(u) {
+  let valor = 0, hora = 0, cantidad = 0, mejoras = 0;
+  for (const id of N.propios(u)) {
+    const n = N.POR_ID[id];
+    const nv = N.nivelDe(u, id);
+    valor += n.precio;
+    for (let i = 1; i <= nv; i++) valor += n.etapas[i].costo;
+    hora += n.etapas[nv].hora;
+    mejoras += nv;
+    cantidad++;
+  }
+  return { valor, hora, cantidad, mejoras };
+}
+
+function historial(u) {
+  const pagados = Number(u.prestamosPagados) || 0;
+  const moras = Number(u.prestamosMora) || 0;
+  const mult = Math.max(0.5, Math.min(1.4, 1 + 0.04 * pagados - 0.15 * moras));
+  return { pagados, moras, mult };
+}
+
+function limite(u) {
+  const a = activos(u);
+  const h = historial(u);
+  return { ...a, ...h, limite: redondear((BASE + a.valor * FACTOR_ACTIVOS + a.hora * HORAS_INGRESO) * h.mult) };
+}
+
+function calificacion(lim, moras) {
+  const l = lim >= 1e9 ? 'AAA' : lim >= 1e8 ? 'AA' : lim >= 1e7 ? 'A' : lim >= 1e6 ? 'BBB' : lim >= 1e5 ? 'BB' : lim >= 1e4 ? 'B' : 'C';
+  return l + (moras > 0 ? ' ⚠️' : '');
+}
+
+function estado(u, ahora = Date.now()) {
+  const p = u.prestamo;
+  if (!p || typeof p !== 'object') return null;
+  const atraso = Math.max(0, ahora - p.vence);
+  const dias = Math.ceil(atraso / 864e5);
+  const mora = atraso > 0 ? Math.round(Math.min(MORA_MAX, dias * MORA_DIA) * p.monto) : 0;
+  const debe = Math.max(0, Math.ceil(p.total + mora - (p.pagado || 0)));
+  return { ...p, atraso: atraso > 0, dias, mora, debe, restante: Math.max(0, p.vence - ahora) };
+}
+
+function cerrar(u, conMora) {
+  if (conMora) u.prestamosMora = (Number(u.prestamosMora) || 0) + 1;
+  else u.prestamosPagados = (Number(u.prestamosPagados) || 0) + 1;
+  delete u.prestamo;
+}
+
+function embargar(u, ahora = Date.now()) {
+  const e = estado(u, ahora);
+  if (!e || !e.atraso) return null;
+  let falta = e.debe, quitado = 0;
+  for (const campo of ['banco', 'saldo']) {
+    const t = Math.min(falta, Math.max(0, Math.floor(u[campo] || 0)));
+    u[campo] = (u[campo] || 0) - t; falta -= t; quitado += t;
+  }
+  u.prestamo.pagado = (u.prestamo.pagado || 0) + quitado;
+  const fin = estado(u, ahora);
+  if (fin.debe <= 0) cerrar(u, true);
+  if (quitado > 0 || fin.debe <= 0) {
+    const a = u.avisoEmbargo || { quitado: 0 };
+    u.avisoEmbargo = { quitado: a.quitado + quitado, debe: fin.debe, saldada: fin.debe <= 0 };
+  }
+  return { quitado, debe: fin.debe, saldada: fin.debe <= 0 };
+}
+
+function ofertas(u) {
+  const l = limite(u).limite;
+  return PLANES.map((p) => {
+    const monto = redondear(l * p.parte);
+    return { ...p, monto, total: Math.ceil(monto * (1 + p.interes)) };
+  }).filter((o) => o.monto >= 500);
+}
+
+function pedir(u, entrada, ahora = Date.now()) {
+  if (u.prestamo) return { error: 'deuda' };
+  const lim = limite(u).limite;
+  const ofs = ofertas(u);
+  let plan, monto;
+  const t = String(entrada || '').toLowerCase().replace(/[,._$]/g, '');
+  if (/^[123]$/.test(t)) { plan = ofs.find((o) => o.id === Number(t)); if (!plan) return { error: 'poco', lim }; monto = plan.monto; }
+  else if (['max', 'todo', 'maximo', 'máximo'].includes(t)) { monto = redondear(lim); }
+  else if (/^\d+$/.test(t)) { monto = parseInt(t, 10); }
+  else return { error: 'uso' };
+  if (monto < 500 || lim < 500) return { error: 'poco', lim };
+  if (monto > lim) return { error: 'limite', lim, monto };
+  if (!plan) plan = PLANES.slice().reverse().find((p) => monto <= lim * p.parte + 0.5) || PLANES[2];
+  const total = Math.ceil(monto * (1 + plan.interes));
+  u.saldo = (u.saldo || 0) + monto;
+  u.prestamo = { monto, interes: plan.interes, plan: plan.nombre, total, pagado: 0, pedido: ahora, vence: ahora + HORAS_PLAZO * 3600000 };
+  return { monto, total, plan, interes: total - monto, vence: u.prestamo.vence };
+}
+
+function pagar(u, entrada, ahora = Date.now()) {
+  const e = estado(u, ahora);
+  if (!e) return { error: 'sin' };
+  const mano = Math.floor(u.saldo || 0), banco = Math.floor(u.banco || 0);
+  const t = String(entrada || '').toLowerCase().replace(/[,._$]/g, '');
+  let monto;
+  if (!t || ['todo', 'all', 'total'].includes(t)) monto = e.debe;
+  else if (t === 'mitad') monto = Math.ceil(e.debe / 2);
+  else if (/^\d+$/.test(t)) monto = parseInt(t, 10);
+  else return { error: 'uso' };
+  monto = Math.min(monto, e.debe);
+  if (monto <= 0) return { error: 'uso' };
+  if (mano + banco < monto) return { error: 'fondos', mano, banco, monto };
+  let falta = monto;
+  const deMano = Math.min(falta, mano); u.saldo -= deMano; falta -= deMano;
+  const deBanco = Math.min(falta, banco); u.banco -= deBanco;
+  u.prestamo.pagado = (u.prestamo.pagado || 0) + monto;
+  const fin = estado(u, ahora);
+  const saldada = fin.debe <= 0;
+  const conMora = e.mora > 0;
+  if (saldada) cerrar(u, conMora);
+  return { monto, deMano, deBanco, debe: fin.debe, saldada, conMora };
+}
+
+module.exports = { HORAS_PLAZO, PLANES, activos, historial, limite, calificacion, estado, embargar, ofertas, pedir, pagar, redondear };
