@@ -7,16 +7,42 @@ var D = window.MAPA_DATA, E = window.MapaEdificios, M = window.MapaMundo;
 var $ = function (i) { return document.getElementById(i); };
 var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
 var dinero = function (n) { return '$' + Math.round(Number(n) || 0).toLocaleString('en-US'); };
-var vista = $('vista'), cv = $('mapa'), carga = $('carga'), aviso = $('aviso');
+var vista = $('vista'), cv = $('mapa'), carga = $('carga'), aviso = $('aviso'), wrap = document.querySelector('.wrap'), giro = false;
 var CATS = {}, porId = {}, estados = [], cajas = [], niveles = [], idx = 3, z = 0.6, mundo = null, ocupado = false, mios = [], turno = 0, actual = -1, tAviso = 0;
 D.c.forEach(function (c) { CATS[c.id] = c; });
+
+// ---- tamaño de la ventana: aprovechar todo el espacio que da WhatsApp ----
+function ventana() { return [window.innerWidth || document.documentElement.clientWidth, window.innerHeight || document.documentElement.clientHeight]; }
+function layout(hForzado) {
+  var v = ventana(), W = v[0], H = hForzado || v[1], s = wrap.style;
+  if (giro) { s.width = H + 'px'; s.height = W + 'px'; s.transformOrigin = '0 0'; s.transform = 'translate(' + W + 'px,0) rotate(90deg)'; }
+  else { s.width = ''; s.transform = ''; s.height = H + 'px'; }
+  wrap.className = 'wrap' + ((giro ? W : H) < 440 ? ' c' : '');
+  $('giro').style.display = giro || H > W * 1.15 ? '' : 'none';
+}
+function recalcular() { // cambió el tamaño de la ventana: se vuelven a calcular los niveles de zoom (el dibujo actual se queda igual)
+  layout();
+  var fit = Math.max(0.04, Math.min(vista.clientWidth / M.ANCHO, vista.clientHeight / M.ALTO));
+  niveles = [fit].concat([0.2, 0.3, 0.45, 0.65, 0.85].filter(function (v) { return v > fit * 1.15; }));
+  idx = 0; for (var i = 1; i < niveles.length; i++) if (Math.abs(niveles[i] - z) < Math.abs(niveles[idx] - z)) idx = i;
+  botonesZoom();
+}
+function arrancar(cb) {
+  var h0 = ventana()[1];
+  if (h0 >= 440) { layout(); return cb(); }
+  layout(660); // la ventana es baja: pido una alta; si WhatsApp ajusta la ventana al contenido, crece
+  var n = 0, t = setInterval(function () {
+    n++;
+    if (ventana()[1] >= 440 || n >= 7) { clearInterval(t); layout(); cb(); }
+  }, 120);
+}
 
 function fallo(e) {
   try { console.error(e); } catch (_) {}
   carga.style.display = 'flex';
   carga.innerHTML = '<div><b>No pude dibujar el mapa aquí.</b><br><br>Pídelo en imágenes con<br><b>' + esc(D.pre) + 'mapa 1</b> · <b>' + esc(D.pre) + 'mapa 2</b><br><b>' + esc(D.pre) + 'mapa 3</b> · <b>' + esc(D.pre) + 'mapa 4</b></div>';
 }
-function toast(t) { aviso.textContent = t; aviso.style.opacity = 1; clearTimeout(tAviso); tAviso = setTimeout(function () { aviso.style.opacity = 0; }, 2200); }
+function toast(t) { aviso.textContent = t; aviso.style.opacity = 1; clearTimeout(tAviso); tAviso = setTimeout(function () { aviso.style.opacity = 0; }, 3200); }
 
 function armar() {
   var items = D.e.map(function (r) { var c = CATS[r.c]; return { id: r.i, num: r.u, cat: r.c, colorCat: c.color, nombreCat: c.nombre }; });
@@ -33,7 +59,7 @@ function armar() {
   });
 }
 function calcularNiveles() {
-  var fit = Math.max(0.06, Math.min(vista.clientWidth / M.ANCHO, vista.clientHeight / M.ALTO));
+  var fit = Math.max(0.04, Math.min(vista.clientWidth / M.ANCHO, vista.clientHeight / M.ALTO));
   niveles = [fit].concat([0.2, 0.3, 0.45, 0.65, 0.85].filter(function (v) { return v > fit * 1.15; }));
   idx = niveles.length - 1; for (var i = 0; i < niveles.length; i++) if (Math.abs(niveles[i] - 0.65) < Math.abs(niveles[idx] - 0.65)) idx = i;
   z = niveles[idx];
@@ -90,7 +116,8 @@ function abrir(k) {
 }
 function cerrar() { $('mod').style.display = 'none'; }
 cv.addEventListener('click', function (ev) {
-  var r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) / z, y = (ev.clientY - r.top) / z, mejor = null;
+  var x, y, mejor = null;
+  if (ev.target === cv && typeof ev.offsetX === 'number') { x = ev.offsetX / z; y = ev.offsetY / z; } else { var r = cv.getBoundingClientRect(); x = (ev.clientX - r.left) / z; y = (ev.clientY - r.top) / z; }
   cajas.forEach(function (c) { if (x >= c.x0 && x <= c.x1 && y >= c.y0 && y <= c.y1 && (!mejor || c.l.y > mejor.l.y)) mejor = c; });
   if (mejor) abrir(mejor.k);
 });
@@ -119,16 +146,32 @@ $('mas').onclick = function () { zoom(idx + 1); };
 $('menos').onclick = function () { zoom(idx - 1); };
 $('todo').onclick = function () { zoom(0); };
 $('cerrar').onclick = cerrar;
+$('full').onclick = function () { // pantalla completa (si este WhatsApp lo permite)
+  var d = document, el = d.documentElement, no = function () { toast('Este WhatsApp no deja pantalla completa. Usa ' + D.pre + 'mapa 1 al ' + D.pre + 'mapa 4 para verlo en imágenes'); };
+  try {
+    if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+    var f = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!f) return no();
+    var lock = function () { try { screen.orientation.lock('landscape').catch(function () {}); } catch (_) {} };
+    var p = f.call(el);
+    if (p && p.then) p.then(lock, no); else lock();
+  } catch (e) { no(); }
+};
+$('giro').onclick = function () { giro = !giro; var cx = (vista.scrollLeft + vista.clientWidth / 2) / z, cy = (vista.scrollTop + vista.clientHeight / 2) / z; recalcular(); irA(cx, cy); };
+window.addEventListener('resize', function () { if (!ocupado && mundo) { var cx = (vista.scrollLeft + vista.clientWidth / 2) / z, cy = (vista.scrollTop + vista.clientHeight / 2) / z; recalcular(); irA(cx, cy); } });
 $('ant').onclick = function () { abrir(actual - 1); };
 $('sig').onclick = function () { abrir(actual + 1); };
 $('ver').onclick = function () { var l = mundo.lotes[actual]; cerrar(); if (l) irA(l.x, l.y - 90, true); };
 $('mod').addEventListener('click', function (e) { if (e.target === $('mod')) cerrar(); });
 
 setTimeout(function () {
-  try {
-    armar(); calcularNiveles(); chips(); pintar(); botonesZoom();
-    var l = mios[0] || mundo.lotes[0]; irA(l.x, l.y - 60);
-    carga.style.display = 'none';
-  } catch (e) { fallo(e); }
+  arrancar(function () {
+    try {
+      armar(); calcularNiveles(); chips(); pintar(); botonesZoom();
+      var l = mios[0] || mundo.lotes[0]; irA(l.x, l.y - 60);
+      carga.style.display = 'none';
+      toast('Gris = aún no lo tienes · Toca un comercio para verlo en grande');
+    } catch (e) { fallo(e); }
+  });
 }, 80);
 })();
