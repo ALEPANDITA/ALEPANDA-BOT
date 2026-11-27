@@ -39,7 +39,7 @@ const elegir = (lista) => lista[Math.floor(Math.random() * lista.length)];
 
 module.exports = {
   name: 'divorcio',
-  aliases: ['divorciar', 'separar'],
+  aliases: ['divorciarse', 'divorciar', 'separar'],
   category: 'perfil',
   description: 'Termina tu matrimonio actual.',
   execute: async (sock, jid, msg) => {
