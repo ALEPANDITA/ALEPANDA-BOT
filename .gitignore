@@ -81,3 +81,11 @@ respaldo-gacha-hp/
 database.respaldo.json
 database.respaldo.json
 database.respaldo.json
+node_modules
+database.json.bak*
+session
+sessions
+auth
+auth_info
+*session*/
+tmp
