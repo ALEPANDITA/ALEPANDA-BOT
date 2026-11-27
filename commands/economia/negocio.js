@@ -22,7 +22,8 @@ function portada(u, db, prefix) {
     'Tus propiedades ganan dinero solas, aunque no estés.',
     `Se junta hasta ${N.MAX_HORAS} h y se cobra con *${prefix}recolectar*.`,
     '',
-    `🏘️ Tienes *${r.cantidad}* de ${r.total} propiedades · ${eco.dinero(r.porHora)} por hora`,
+    `🏘️ Tienes *${r.cantidad}* de ${r.total} propiedades · ${eco.dinero(r.porHora)} por hora${r.mult > 1 ? ` ⚡x${Math.round(r.mult * 100) / 100}` : ''}`,
+    ...(r.mult > 1 ? [`⚡ Multiplicador activo: quedan ${Math.ceil((r.multHasta - Date.now()) / 60000)} min · mira *${prefix}misiones*`] : []),
     '',
     '*Zonas* (ábrelas con el nombre):'
   ];
@@ -182,3 +183,5 @@ module.exports = {
     });
   }
 };
+
+// MISIONES-AVISO

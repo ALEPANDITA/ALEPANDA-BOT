@@ -44,6 +44,7 @@ module.exports = {
         emojis,
         `💰 Recolectaste: *${eco.dinero(r.total)}*`,
         `🏘️ ${r.resumen.cantidad} propiedades ganan ${eco.dinero(r.resumen.porHora)} por hora`,
+        ...(r.resumen.mult > 1 ? [`⚡ Multiplicador activo: x${Math.round(r.resumen.mult * 100) / 100} · quedan ${Math.ceil((r.resumen.multHasta - Date.now()) / 60000)} min`] : []),
         ...(r.resumen.inv.compartido ? [`💞 Compartidas con tu pareja${r.resumen.bonos ? ` · ${r.resumen.bonos} con bono x${N.BONO_PAREJA}` : ''}`] : []),
         `💼 Saldo actual: *${eco.dinero(r.saldo)}*`, '',
         `🗺️ Mira todo en *${prefix}mapa*`
@@ -51,3 +52,5 @@ module.exports = {
     });
   }
 };
+
+// MISIONES-AVISO

@@ -856,7 +856,7 @@ async function startBot() {
     try {
       const emojiCategoria = EMOJIS_POR_CATEGORIA[comando.category] || EMOJIS_POR_CATEGORIA.default;
       await sock.sendMessage(jid, { react: { text: emojiCategoria, key: msg.key } });
-      await comando.execute(require('./lib/iaRespuestas').envolverSockSiEsIA(sock, comando), jid, msg, { prefix, texto, comandos });
+      await require('./lib/misiones').medir(sock, jid, msg, comando, texto, () => comando.execute(require('./lib/iaRespuestas').envolverSockSiEsIA(sock, comando), jid, msg, { prefix, texto, comandos })); // MISIONES-GANCHO
     } catch (err) {
       console.error(err);
       await sock.sendMessage(jid, { text: 'Ocurrio un error al ejecutar el comando.' });
@@ -868,3 +868,5 @@ async function startBot() {
 try { require('./lib/arcade-web').iniciarSiHaceFalta(); } catch (err) { console.error('[arcade] no pude iniciar el servidor web:', err.message); }
 
 startBot();
+
+// MISIONES-GANCHO
