@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "postinstall": "patch-package",
+    "postinstall": "patch-package && node scripts/parche-sticker-sonido.js || true",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

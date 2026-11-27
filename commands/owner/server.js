@@ -4,8 +4,8 @@ const { generarTarjetaServer } = require('../../lib/tarjetaserver');
 const os = require('os');
 
 module.exports = {
-  name: 'sv',
-  aliases: ['server'],
+  name: 'sbs',
+  aliases: ['server', 'servidor'],
   category: 'owner',
   description: 'Muestra el estado del servidor: RAM, disco, CPU, uptime (solo owners)',
   execute: async (sock, jid, msg) => {

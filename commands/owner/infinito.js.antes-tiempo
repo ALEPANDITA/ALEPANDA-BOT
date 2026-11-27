@@ -1,0 +1,41 @@
+// .infinito  -> (solo owner) da o quita el BANCO infinito.
+//   .infinito            -> a ti mismo
+//   .infinito @alguien   -> a esa persona (o respondiendo a su mensaje)
+// Si ya lo tenia, se lo quita (banco en 0). Con infinito el BANCO nunca se mueve: puede retirar cuanto quiera
+// y el banco sigue igual. El dinero en mano es normal (y se puede robar). En el perfil el banco sale ∞.
+const { leerConfig } = require('../../lib/config');
+const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { esOwnerBot } = require('../../lib/permisos');
+const { llavePersona, llaveRemitente, objetivoDe } = require('../../lib/economiaid');
+const { exito, advertencia } = require('../../lib/estilo');
+
+module.exports = {
+  name: 'infinito',
+  aliases: ['infinite', 'dineroinfinito'],
+  category: 'owner',
+  description: 'Dar o quitar banco infinito (solo owner)',
+  execute: async (sock, jid, msg, { texto }) => {
+    const config = leerConfig();
+    if (!(await esOwnerBot(sock, config, msg))) {
+      return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS', estilo: 'neon' }) });
+    }
+    const db = leerDB();
+    const objetivo = objetivoDe(msg, texto);
+    const clave = objetivo ? await llavePersona(sock, jid, db, objetivo) : await llaveRemitente(sock, jid, db, msg);
+    const u = getUsuario(db, clave);
+
+    let aviso;
+    if (u.infinito) {
+      delete u.banco; delete u.infinito;
+      const nuevo = getUsuario(db, clave);
+      nuevo.banco = 0;
+      aviso = exito('Le quité el banco infinito. Su banco quedó en $0 (su dinero en mano no se tocó).', { titulo: 'INFINITO QUITADO', estilo: 'neon' });
+    } else {
+      u.infinito = true;
+      getUsuario(db, clave); // activa el banco fijo
+      aviso = exito('Banco infinito activado ♾️\nSu banco nunca baja: puede retirar y comprar lo que quiera. El dinero en mano es normal (se puede robar).\nEn su perfil el banco sale ∞.', { titulo: 'BANCO INFINITO', estilo: 'neon' });
+    }
+    guardarDB(db);
+    await sock.sendMessage(jid, { text: aviso });
+  }
+};

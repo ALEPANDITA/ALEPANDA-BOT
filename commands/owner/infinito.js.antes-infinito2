@@ -1,0 +1,42 @@
+// .infinito  -> (solo owner) da o quita el dinero infinito.
+//   .infinito            -> a ti mismo
+//   .infinito @alguien   -> a esa persona (o respondiendo a su mensaje)
+// Si ya lo tenia, se lo quita (queda con 0). Con infinito el saldo y el banco NUNCA se mueven: puede
+// sacar, comprar, apostar o pagar lo que sea sin gastar nada. En el perfil sale ∞ en vez del numero.
+const { leerConfig } = require('../../lib/config');
+const { leerDB, guardarDB, getUsuario } = require('../../lib/db');
+const { esOwnerBot } = require('../../lib/permisos');
+const { llavePersona, llaveRemitente, objetivoDe } = require('../../lib/economiaid');
+const { exito, advertencia } = require('../../lib/estilo');
+
+module.exports = {
+  name: 'infinito',
+  aliases: ['infinite', 'dineroinfinito'],
+  category: 'owner',
+  description: 'Dar o quitar dinero infinito (solo owner)',
+  execute: async (sock, jid, msg, { texto }) => {
+    const config = leerConfig();
+    if (!(await esOwnerBot(sock, config, msg))) {
+      return sock.sendMessage(jid, { text: advertencia('Solo un owner del bot puede usar este comando.', { titulo: 'SIN PERMISOS', estilo: 'neon' }) });
+    }
+    const db = leerDB();
+    const objetivo = objetivoDe(msg, texto);
+    const clave = objetivo ? await llavePersona(sock, jid, db, objetivo) : await llaveRemitente(sock, jid, db, msg);
+    const u = getUsuario(db, clave);
+
+    let aviso;
+    if (u.infinito) {
+      // Quitar: se borra la marca y el saldo vuelve a numeros normales (0)
+      delete u.saldo; delete u.banco; delete u.infinito;
+      const nuevo = getUsuario(db, clave);
+      nuevo.saldo = 0; nuevo.banco = 0;
+      aviso = exito('Le quité el dinero infinito. Quedó con $0 en mano y $0 en banco.', { titulo: 'INFINITO QUITADO', estilo: 'neon' });
+    } else {
+      u.infinito = true;
+      getUsuario(db, clave); // activa los campos fijos
+      aviso = exito('Dinero infinito activado ♾️\nSu saldo y su banco no se mueven nunca: puede sacar, comprar y gastar lo que quiera sin que baje.\nEn su perfil sale ∞.', { titulo: 'DINERO INFINITO', estilo: 'neon' });
+    }
+    guardarDB(db);
+    await sock.sendMessage(jid, { text: aviso });
+  }
+};

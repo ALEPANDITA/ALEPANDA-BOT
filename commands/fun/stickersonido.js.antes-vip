@@ -1,0 +1,56 @@
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { advertencia, error: cajaError } = require('../../lib/estilo');
+const { crearSonoro, enviarSonoro, parcheActivo, SEGUNDOS_MAX } = require('../../lib/stickersonido');
+const { PACKNAME_POR_DEFECTO, AUTOR_POR_DEFECTO } = require('../../lib/stickerlib');
+
+const MAX_MB = 25;
+
+// Video que mandas con el comando de pie de foto, o el video al que respondes
+function encontrarVideo(msg) {
+  const citado = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+  if (msg.message?.videoMessage) return { objeto: msg, nodo: msg.message.videoMessage };
+  if (citado?.videoMessage) return { objeto: { message: citado }, nodo: citado.videoMessage };
+  return null;
+}
+
+function leerPaqueteYAutor(texto, nombreUsuario) {
+  const resto = String(texto || '').trim().split(/\s+/).slice(1).join(' ').trim();
+  if (!resto) return { packname: PACKNAME_POR_DEFECTO, author: `${AUTOR_POR_DEFECTO} ${nombreUsuario}` };
+  const [paquete, ...autor] = resto.split('|');
+  return { packname: paquete.trim().slice(0, 60) || PACKNAME_POR_DEFECTO, author: autor.join('|').trim().slice(0, 60) || `${AUTOR_POR_DEFECTO} ${nombreUsuario}` };
+}
+
+module.exports = {
+  name: 'stickersonido',
+  aliases: ['sa'],
+  category: 'fun',
+  description: `Convierte un video con audio en sticker CON SONIDO (primeros ${SEGUNDOS_MAX} s). Responde a un video con .sa  o  .sa paquete | autor`,
+  execute: async (sock, jid, msg, { prefix, texto }) => {
+    const video = encontrarVideo(msg);
+    if (!video) {
+      return sock.sendMessage(jid, { text: advertencia(`Responde a un *video con audio* con ${prefix}sa y lo convierto en sticker con sonido 🔊\n(Se usan los primeros ${SEGUNDOS_MAX} segundos)\nTambien: ${prefix}sa Mi paquete | Mi nombre`, { titulo: 'FALTA EL VIDEO', estilo: 'kawaii' }) }, { quoted: msg });
+    }
+    const mb = Number(video.nodo.fileLength || 0) / (1024 * 1024);
+    if (mb > MAX_MB) return sock.sendMessage(jid, { text: advertencia(`Ese video pesa ${mb.toFixed(0)} MB. Usa uno de maximo ${MAX_MB} MB.`) }, { quoted: msg });
+    if (!parcheActivo()) {
+      return sock.sendMessage(jid, { text: cajaError('Falta activar el parche de la libreria para stickers con sonido (scripts/parche-sticker-sonido.js) y reiniciar el bot.') }, { quoted: msg });
+    }
+
+    try {
+      await sock.sendMessage(jid, { text: '🔊 Preparando tu sticker con sonido...' }, { quoted: msg });
+      const buffer = await downloadMediaMessage(video.objeto, 'buffer', {});
+      const { packname, author } = leerPaqueteYAutor(texto, msg.pushName || 'Usuario');
+      const sonoro = await crearSonoro(buffer, { packname, author });
+      await enviarSonoro(sock, jid, sonoro);
+    } catch (err) {
+      console.error('[stickersonido]', err);
+      let motivo;
+      if (err.message === 'SIN_AUDIO') motivo = `Ese video no tiene sonido. Para un sticker normal usa ${prefix}s`;
+      else if (err.message === 'SIN_PARCHE') motivo = 'Falta activar el parche de la libreria para stickers con sonido.';
+      else if (err.code === 'ENOENT') motivo = 'No encontre ffmpeg en el servidor.';
+      else if (/muy pesado/.test(err.message)) motivo = err.message;
+      else motivo = 'No se pudo crear el sticker con sonido.';
+      await sock.sendMessage(jid, { text: cajaError(motivo) }, { quoted: msg });
+    }
+  }
+};

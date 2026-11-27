@@ -1,0 +1,133 @@
+// Stickers con sonido (los que reproducen audio al tocarlos).
+// Necesita el parche de la libreria: scripts/parche-sticker-sonido.js (agrega los campos 26 y 134 al protobuf).
+// - Video -> WebP animado (512x512, max 5 s) + audio Opus mono 48 kHz, los dos arrancan en 0.0 s.
+// - Se manda un mensaje "doble": StickerMessage con el audio dentro (campo 26) + soundStickerMessage (campo 134).
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const { addExif, PACKNAME_POR_DEFECTO, AUTOR_POR_DEFECTO } = require('./stickerlib');
+
+const execFileAsync = promisify(execFile);
+const SEGUNDOS_MAX = 5;                 // los stickers con sonido duran como maximo 5 s
+const PESO_MAX_WEBP = 900 * 1024;       // WhatsApp rechaza stickers animados muy pesados
+const TMP = path.join(os.tmpdir(), 'alepanda-sticker-sonido');
+const FILTRO = 'scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000,format=rgba';
+const INTENTOS = [{ fps: 12, q: 30 }, { fps: 10, q: 22 }, { fps: 8, q: 14 }]; // si pesa mucho, se baja la calidad
+
+// ---- cola: una conversion a la vez (el VPS es justo de CPU) ----
+let ocupado = false;
+const espera = [];
+function turno() { return new Promise((ok) => { const go = () => { ocupado = true; ok(); }; ocupado ? espera.push(go) : go(); }); }
+function soltar() { const s = espera.shift(); if (s) s(); else ocupado = false; }
+
+const nombre = (ext) => path.join(TMP, `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`);
+const borrar = (...r) => { for (const x of r) { try { fs.unlinkSync(x); } catch (_) { /* nada */ } } };
+const ff = (args) => execFileAsync('ffmpeg', ['-y', '-nostdin', '-loglevel', 'error', '-threads', '2', ...args], { timeout: 90000, maxBuffer: 20 * 1024 * 1024 });
+
+async function tieneAudio(archivo) {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', archivo], { timeout: 20000 });
+    return /audio/.test(stdout);
+  } catch (_) { return false; }
+}
+async function duracionDe(archivo) {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', archivo], { timeout: 20000 });
+    const d = parseFloat(stdout);
+    return Number.isFinite(d) ? d : SEGUNDOS_MAX;
+  } catch (_) { return SEGUNDOS_MAX; }
+}
+
+// EXIF del modo VIP: igual que el normal pero con "premium": 1 (si algo falla, sale con el EXIF normal)
+async function addExifVip(webpBuffer, packname, author) {
+  try {
+    const m = require('node-webpmux');
+    const webp = m.Image ? m : (m.default || m);
+    const img = new webp.Image();
+    const json = { 'sticker-pack-id': crypto.randomBytes(32).toString('hex'), 'sticker-pack-name': packname, 'sticker-pack-publisher': author, emojis: [''], premium: 1 };
+    const cab = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
+    const cuerpo = Buffer.from(JSON.stringify(json), 'utf-8');
+    const exif = Buffer.concat([cab, cuerpo]);
+    exif.writeUIntLE(cuerpo.length, 14, 4);
+    await img.load(webpBuffer);
+    img.exif = exif;
+    return await img.save(null);
+  } catch (err) {
+    console.error('[stickersonido] EXIF VIP fallo, uso el normal:', err.message);
+    return addExif(webpBuffer, packname, author);
+  }
+}
+
+// Devuelve { webp, ogg, segundos }. Lanza Error('SIN_AUDIO') si el video no trae sonido.
+async function crearSonoro(videoBuffer, { packname = PACKNAME_POR_DEFECTO, author = AUTOR_POR_DEFECTO, vip = false } = {}) {
+  fs.mkdirSync(TMP, { recursive: true });
+  await turno();
+  const entrada = nombre('mp4');
+  const salidaWebp = nombre('webp');
+  const salidaOgg = nombre('ogg');
+  try {
+    fs.writeFileSync(entrada, videoBuffer);
+    if (!(await tieneAudio(entrada))) throw new Error('SIN_AUDIO');
+
+    const hacerAudio = ff(['-i', entrada, '-t', String(SEGUNDOS_MAX), '-vn',
+      '-filter_complex', '[0:a]aresample=48000:async=1,loudnorm=I=-16:TP=-1.5:LRA=11[a]', '-map', '[a]',
+      '-c:a', 'libopus', '-b:a', '48k', '-vbr', 'on', '-application', 'voip', '-ac', '1', '-ar', '48000', salidaOgg]);
+    const hacerWebp = (async () => {
+      for (const it of INTENTOS) {
+        await ff(['-i', entrada, '-t', String(SEGUNDOS_MAX), '-vf', `setpts=PTS-STARTPTS,fps=${it.fps},${FILTRO}`,
+          '-vcodec', 'libwebp', '-preset', 'default', '-q:v', String(it.q), '-compression_level', '6', '-loop', '0', '-an', salidaWebp]);
+        const b = fs.readFileSync(salidaWebp);
+        if (b.length <= PESO_MAX_WEBP) return b;
+      }
+      throw new Error('El sticker quedo muy pesado, prueba con un video mas corto.');
+    })();
+    const [, webpCrudo] = await Promise.all([hacerAudio, hacerWebp]);
+
+    const ogg = fs.readFileSync(salidaOgg);
+    const segundos = Math.max(1, Math.min(SEGUNDOS_MAX, Math.round(await duracionDe(salidaOgg))));
+    const webp = vip ? await addExifVip(webpCrudo, packname, author) : await addExif(webpCrudo, packname, author);
+    return { webp, ogg, segundos };
+  } finally {
+    borrar(entrada, salidaWebp, salidaOgg);
+    soltar();
+  }
+}
+
+// ---- envio ----
+function baileys() { return require('@whiskeysockets/baileys'); }
+
+// true si la libreria ya tiene el parche (sabe codificar soundStickerMessage)
+function parcheActivo() {
+  try {
+    const { proto } = baileys();
+    const bin = proto.Message.encode(proto.Message.fromObject({ soundStickerMessage: { message: { conversation: 'x' } } })).finish();
+    return bin.length > 0;
+  } catch (_) { return false; }
+}
+
+async function enviarSonoro(sock, jid, { webp, ogg, segundos }, { vip = false } = {}) {
+  const { prepareWAMessageMedia, proto } = baileys();
+  if (!parcheActivo()) { const e = new Error('SIN_PARCHE'); throw e; }
+
+  const stickerMedia = await prepareWAMessageMedia({ sticker: webp }, { upload: sock.waUploadToServer });
+  const audioMedia = await prepareWAMessageMedia({ audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: true }, { upload: sock.waUploadToServer });
+  if (!stickerMedia?.stickerMessage || !audioMedia?.audioMessage) throw new Error('No se pudo subir el sticker o el audio a WhatsApp.');
+
+  const sticker = {
+    ...stickerMedia.stickerMessage,
+    isAnimated: true,
+    stickerSentTs: Date.now(),
+    audioMessage: { ...audioMedia.audioMessage, seconds: segundos }
+  };
+  if (vip) sticker.isAvatar = true;
+
+  const contenido = proto.Message.fromObject({ stickerMessage: sticker, soundStickerMessage: { message: { stickerMessage: sticker } } });
+  const messageId = '3EB0' + crypto.randomBytes(9).toString('hex').toUpperCase();
+  await sock.relayMessage(jid, contenido, { messageId });
+  return messageId;
+}
+
+module.exports = { crearSonoro, enviarSonoro, parcheActivo, SEGUNDOS_MAX };

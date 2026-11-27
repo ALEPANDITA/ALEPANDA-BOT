@@ -33,7 +33,7 @@ function leerPaqueteYAutor(texto, nombreUsuario) {
 
 module.exports = {
   name: 'sticker',
-  aliases: ['s', 'sa'],
+  aliases: ['s'],
   category: 'fun',
   description: 'Convierte imagen, video/gif o sticker en sticker con tu paquete. Uso: .s  o  .s paquete | autor',
   execute: async (sock, jid, msg, { prefix, texto }) => {

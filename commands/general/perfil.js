@@ -1,6 +1,7 @@
 const { leerDB, getUsuario, claveCanonica } = require('../../lib/db');
 const { formatearCumple, edadDe } = require('../../lib/cumple');
 const TP = require('../../lib/tiendaperfil');
+const MS = require('../../lib/mascotas'); // MASCOTAS-PERFIL
 const { bloqueAccesorios } = require('../../lib/tiendaperfil'); // PARCHE-ACCESORIOS
 
 const TEMAS = { rosa: '🌸', azul: '💙', morado: '💜', verde: '💚', rojo: '❤️', dorado: '✨', negro: '🖤', naranja: '🧡', amarillo: '💛' };
@@ -114,6 +115,7 @@ module.exports = {
         nombre: usuario.perfilNombre || nombreDe(objetivo),
         titulo: TP.tituloDe(usuario) || usuario.perfilTitulo || '',
         accesorios: TP.visiblesDe(usuario).slice(0, TP.MAX_PUESTOS).map((x) => x.id),
+        mascotas: MS.paraPerfil(db, usuario, claveCanonica(db, objetivo)),
         desc: usuario.descripcion || '',
         genero,
         cumple,
@@ -160,3 +162,5 @@ module.exports = {
 };
 
 // ACCESORIOS-FOTO
+
+// MASCOTAS-PERFIL

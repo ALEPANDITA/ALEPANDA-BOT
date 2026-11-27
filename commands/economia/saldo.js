@@ -12,8 +12,8 @@ module.exports = {
     const usuario = getUsuario(db, remitente);
 
     const texto = caja([
-      `💰 En mano: *$${usuario.saldo}*`,
-      `🏦 En banco: *$${usuario.banco}*`
+      `💰 En mano: *$${usuario.saldo}*`, // PARCHE-INFINITO
+      `🏦 En banco: *${usuario.infinito ? '∞' : '$' + usuario.banco}*`
     ], { titulo: 'TU SALDO' });
 
     await sock.sendMessage(jid, { text: texto });
