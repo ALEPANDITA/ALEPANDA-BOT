@@ -47,7 +47,7 @@ module.exports = {
     if (elegida) {
       if (palabras.length === 1 && !textoCitado) return guardarVoz(elegida); // solo el nombre: queda como tu voz
       voz = elegida; palabras = palabras.slice(1);
-    } else if (/^-[\p{L}]+$/u.test(primera)) {
+    } else if (/^-[\p{L}\p{N}]+$/u.test(primera)) {
       return responder(advertencia(`No tengo la voz *${primera}*. Mira la lista con *${prefix}brat2 voces*`, { titulo: 'VOZ NO ENCONTRADA', estilo: 'kawaii' }));
     }
 
@@ -65,6 +65,10 @@ module.exports = {
       await responder(`🔊 Preparando tu brat con voz (${voz})...`);
       const brat = await crearBratConVoz(textoFinal, { author: `${AUTOR_POR_DEFECTO} ${msg.pushName || 'Usuario'}`, voz });
       await enviarSonoro(sock, jid, brat);
+      if (brat.vozUsada && brat.vozUsada !== brat.vozPedida) {
+        console.warn(`[brat2] la voz "${voz}" (${brat.vozPedida}) no esta disponible en el servidor; se uso ${brat.vozUsada}`);
+        await responder(`⚠️ La voz *${voz}* no está lista en el servidor (falta instalarle algo) y usé una parecida.`);
+      }
     } catch (err) {
       console.error('[brat2]', err);
       let motivo;
